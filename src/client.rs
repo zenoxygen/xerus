@@ -4,20 +4,21 @@ extern crate url;
 use crate::peers::*;
 
 use anyhow::{anyhow, Result};
-use url::Url;
 
-use std::fs::File;
-use std::io::Read;
-use std::path::PathBuf;
+use std::net::{IpAddr, SocketAddr, TcpStream};
 use std::time::Duration;
 
 /// Client structure.
-#[derive(Clone)]
 pub struct Client {
-    pub ip: Ipv4Addr,
-    pub port: u16,
+    pub conn: TcpStream,
 }
 
 impl Client {
-    pub fn new(peer: &Peer, peer_id: Vec<u8>, info_hash: Vec<u8>) -> Result<Peer> {}
+    pub fn new(peer: &Peer, peer_id: Vec<u8>, info_hash: Vec<u8>) -> Result<Client> {
+        println!("Connecting to peer {:?}:{:?}", &peer.ip, &peer.port);
+        let peer_socket = SocketAddr::new(IpAddr::V4(peer.ip), peer.port);
+        let peer_conn = TcpStream::connect_timeout(&peer_socket, Duration::from_secs(15))?;
+        let client = Client { conn: peer_conn };
+        Ok(client)
+    }
 }

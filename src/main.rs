@@ -19,6 +19,7 @@
 // SOFTWARE.
 
 mod args;
+mod client;
 mod peers;
 mod torrent;
 

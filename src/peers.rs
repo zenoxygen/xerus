@@ -74,7 +74,6 @@ pub fn build_peers(tracker_peers: Vec<u8>) -> Result<Vec<Peer>> {
         port.push(tracker_peers[offset + 5]);
         let mut port_cursor = Cursor::new(port);
         peers[i].port = port_cursor.read_u16::<BigEndian>()?;
-        println!("{:?}:{:?}", peers[i].ip, peers[i].port);
         port = vec![];
     }
 

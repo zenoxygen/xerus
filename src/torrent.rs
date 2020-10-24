@@ -25,6 +25,7 @@ extern crate serde;
 extern crate serde_bencode;
 extern crate url;
 
+use crate::client::*;
 use crate::peers::*;
 
 use anyhow::{anyhow, Result};
@@ -61,6 +62,8 @@ pub struct Torrent {
     length: u32,
     // Suggested filename where to save the file
     name: String,
+    // Urlencoded 20-byte string used as unique client ID
+    peer_id: Vec<u8>,
     // Peers
     peers: Vec<Peer>,
 }
@@ -178,6 +181,7 @@ impl Torrent {
         self.piece_length = bencode.info.piece_length;
         self.length = bencode.info.length;
         self.name = bencode.info.name.to_owned();
+        self.peer_id = peer_id.clone();
         self.peers = self.request_peers(peer_id, PORT)?;
 
         Ok(())
@@ -191,6 +195,15 @@ impl Torrent {
     ///
     pub fn download(&mut self, filepath: PathBuf) -> Result<()> {
         println!("Downloading torrent...");
+        for peer in self.peers.iter_mut() {
+            let peer_id = self.peer_id.clone();
+            let info_hash = self.info_hash.clone();
+            if let Ok(client) = Client::new(&peer, peer_id, info_hash) {
+                println!("Connected to peer {:?}:{:?}", peer.ip, peer.port);
+            } else {
+                eprintln!("Unable to connect to peer");
+            }
+        }
 
         Ok(())
     }
@@ -210,9 +223,8 @@ impl Torrent {
         };
 
         // Build blocking HTTP client
-        let timeout = Duration::from_secs(15);
         let client = reqwest::blocking::Client::builder()
-            .timeout(timeout)
+            .timeout(Duration::from_secs(15))
             .build()?;
 
         // Send GET request to the tracker
