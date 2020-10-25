@@ -26,7 +26,7 @@ extern crate serde_bencode;
 extern crate url;
 
 use crate::client::*;
-use crate::peers::*;
+use crate::peer::*;
 
 use anyhow::{anyhow, Result};
 use crypto::digest::Digest;
@@ -42,17 +42,18 @@ use std::borrow::Cow;
 use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
+use std::thread;
 use std::time::Duration;
 
 const PORT: u16 = 6881;
 const SHA1_HASH_SIZE: usize = 20;
 
 /// Torrent structure.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Torrent {
     // URL of the tracker
     announce: String,
-    // SHA-1 hash calculated over the content of the bencoded info dictionary
+    // 20-byte SHA-1 hash calculated over the content of the bencoded info dictionary
     info_hash: Vec<u8>,
     // SHA-1 hashes of each pieces
     pieces_hashes: Vec<Vec<u8>>,
@@ -187,27 +188,6 @@ impl Torrent {
         Ok(())
     }
 
-    /// Download torrent.
-    ///
-    /// # Arguments
-    ///
-    /// * `filepath` - Path where to save the file.
-    ///
-    pub fn download(&mut self, filepath: PathBuf) -> Result<()> {
-        println!("Downloading torrent...");
-        for peer in self.peers.iter_mut() {
-            let peer_id = self.peer_id.clone();
-            let info_hash = self.info_hash.clone();
-            if let Ok(client) = Client::new(&peer, peer_id, info_hash) {
-                println!("Connected to peer {:?}:{:?}", peer.ip, peer.port);
-            } else {
-                eprintln!("Unable to connect to peer");
-            }
-        }
-
-        Ok(())
-    }
-
     /// Request peers from tracker.
     ///
     /// # Arguments
@@ -284,5 +264,42 @@ impl Torrent {
             .append_pair("left", &self.length.to_string());
 
         Ok(base_url.to_string())
+    }
+
+    /// Download torrent.
+    ///
+    /// # Arguments
+    ///
+    /// * `filepath` - Path where to save the file.
+    ///
+    pub fn download(&self, filepath: PathBuf) -> Result<()> {
+        println!("Downloading torrent...");
+        let peers = self.peers.to_owned();
+        for peer in peers {
+            let self_copy = self.clone();
+            thread::spawn(move || {
+                self_copy.start_download(peer.clone());
+            });
+        }
+
+        Ok(())
+    }
+
+    /// Start download file.
+    ///
+    /// # Arguments
+    ///
+    /// * `peer` - A remote peer.
+    ///
+    pub fn start_download(&self, peer: Peer) {
+        let peer_id_copy = self.peer_id.clone();
+        let info_hash_copy = self.info_hash.clone();
+        let client = match Client::new(&peer, peer_id_copy, info_hash_copy) {
+            Ok(client) => {
+                println!("Connected to peer {:?}:{:?}", &peer.ip, &peer.port);
+                client;
+            }
+            Err(_) => return,
+        };
     }
 }

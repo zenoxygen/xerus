@@ -20,7 +20,8 @@
 
 mod args;
 mod client;
-mod peers;
+mod handshake;
+mod peer;
 mod torrent;
 
 use std::path::{Path, PathBuf};

@@ -48,10 +48,9 @@ pub fn build_peers(tracker_peers: Vec<u8>) -> Result<Vec<Peer>> {
     if tracker_peers.len() % PEER_SIZE != 0 {
         return Err(anyhow!("received invalid peers from tracker"));
     }
-    let nb_peers = tracker_peers.len() / PEER_SIZE;
-    println!("Received {:?} peers from tracker", nb_peers);
 
     // Build peers
+    let nb_peers = tracker_peers.len() / PEER_SIZE;
     let mut peers: Vec<Peer> = vec![
         Peer {
             ip: Ipv4Addr::new(1, 1, 1, 1),
