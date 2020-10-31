@@ -18,25 +18,23 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use anyhow::{anyhow, Result};
-
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 const PROTOCOL_ID: &str = "BitTorrent protocol";
 
 /// Handshake structure.
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct Handshake {
-    // The length of the protocol identifier
-    pstrlen: u8,
+    pub pstrlen: u8,
     // String identifier of the protocol
-    pstr: Vec<u8>,
+    pub pstr: Vec<u8>,
     // 8 reserved bytes, all set to 0
-    reserved: Vec<u8>,
+    pub reserved: Vec<u8>,
     // 20-byte SHA-1 hash of the info key in the metainfo file
-    info_hash: Vec<u8>,
+    pub info_hash: Vec<u8>,
     // 20-byte string used as a unique ID for the client
-    peer_id: Vec<u8>,
+    pub peer_id: Vec<u8>,
 }
 
 impl Handshake {
@@ -51,6 +49,8 @@ impl Handshake {
         let pstr = String::from(PROTOCOL_ID).into_bytes();
         let pstrlen = pstr.len() as u8;
         let reserved: Vec<u8> = vec![0; 8];
+
+        // Build handshake
         let handshake = Handshake {
             pstrlen,
             pstr,
@@ -62,15 +62,53 @@ impl Handshake {
         Ok(handshake)
     }
 
-    /// Serialize the handshake message.
-    ///
-    /// The handshake message sent to peers is the concatenation of ‘pstrlen’, ‘pstr’, ‘reserved’, ‘info_hash’, and ‘peer_id’ into one long byte string.
+    /// Serialize an handshake message.
     pub fn serialize(&self) -> Result<Vec<u8>> {
-        let encoded: Vec<u8> = match bincode::serialize(self) {
-            Ok(encoded) => encoded,
-            Err(_) => return Err(anyhow!("could not serialize handshake message")),
-        };
+        let mut serialized: Vec<u8> = vec![];
+        serialized.push(self.pstrlen);
+        let mut pstr: Vec<u8> = self.pstr.clone();
+        serialized.append(&mut pstr);
+        let mut reserved: Vec<u8> = self.reserved.clone();
+        serialized.append(&mut reserved);
+        let mut info_hash: Vec<u8> = self.info_hash.clone();
+        serialized.append(&mut info_hash);
+        let mut peer_id: Vec<u8> = self.peer_id.clone();
+        serialized.append(&mut peer_id);
 
-        Ok(encoded)
+        Ok(serialized)
     }
+}
+
+/// Deserialize an handshake message.
+pub fn deserialize(buf: &Vec<u8>, pstrlen: u8) -> Result<Handshake> {
+    let mut pstr = Vec::new();
+    let mut info_hash = Vec::new();
+    let mut peer_id = Vec::new();
+    let mut reserved = vec![0; 8];
+
+    for (i, x) in buf.iter().enumerate() {
+        if i < pstrlen as usize {
+            pstr.push(x.to_owned());
+        }
+        if i >= (pstrlen as usize) && i < (pstrlen as usize + 8) {
+            reserved.push(x.to_owned());
+        }
+        if i >= (pstrlen as usize + 8) && i < (pstrlen as usize + 8 + 20) {
+            info_hash.push(x.to_owned());
+        }
+        if i >= (pstrlen as usize + 8 + 20) {
+            peer_id.push(x.to_owned());
+        }
+    }
+
+    // Build handshake
+    let handshake = Handshake {
+        pstrlen,
+        pstr,
+        reserved,
+        info_hash,
+        peer_id,
+    };
+
+    Ok(handshake)
 }

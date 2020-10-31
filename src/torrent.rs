@@ -151,21 +151,20 @@ impl Torrent {
     ///
     pub fn open(&mut self, filepath: PathBuf) -> Result<()> {
         // Open torrent
-        let file = File::open(filepath);
-        let mut file = match file {
+        let mut file = match File::open(filepath) {
             Ok(file) => file,
             Err(_) => return Err(anyhow!("could not open torrent")),
         };
 
         // Read torrent content in a buffer
         let mut buf = Vec::new();
-        let bencode = match file.read_to_end(&mut buf) {
-            // Deserialize bencoded data from torrent
-            Ok(_) => match de::from_bytes::<BencodeTorrent>(&buf) {
-                Ok(bencode) => bencode,
-                Err(_) => return Err(anyhow!("could not decode torrent")),
-            },
-            Err(_) => return Err(anyhow!("could not read torrent")),
+        if file.read_to_end(&mut buf).is_err() {
+            return Err(anyhow!("could not read torrent"));
+        }
+        // Deserialize bencoded data from torrent
+        let bencode = match de::from_bytes::<BencodeTorrent>(&buf) {
+            Ok(bencode) => bencode,
+            Err(_) => return Err(anyhow!("could not decode torrent")),
         };
 
         // Generate a random 20-byte peer id
@@ -212,13 +211,16 @@ impl Torrent {
         let response = client.get(&tracker_url).send().unwrap().bytes()?;
 
         // Deserialize bencoded tracker response
-        let bencode_tracker = match de::from_bytes::<BencodeTracker>(&response) {
+        let tracker_bencode = match de::from_bytes::<BencodeTracker>(&response) {
             Ok(bencode) => bencode,
             Err(_) => return Err(anyhow!("could not decode tracker response")),
         };
 
         // Build peers from tracker response
-        let peers: Vec<Peer> = build_peers(bencode_tracker.peers.to_vec())?;
+        let peers: Vec<Peer> = match build_peers(tracker_bencode.peers.to_vec()) {
+            Ok(peers) => peers,
+            Err(_) => return Err(anyhow!("could not build peers")),
+        };
 
         Ok(peers)
     }
@@ -232,7 +234,10 @@ impl Torrent {
     ///
     pub fn build_tracker_url(&self, peer_id: Vec<u8>, port: u16) -> Result<String> {
         // Parse tracker URL from torrent
-        let mut base_url = Url::parse(&self.announce)?;
+        let mut base_url = match Url::parse(&self.announce) {
+            Ok(url) => url,
+            Err(_) => return Err(anyhow!("could not parse tracker url")),
+        };
 
         // Add parameters to the tracker URL
         base_url
@@ -273,14 +278,15 @@ impl Torrent {
     /// * `filepath` - Path where to save the file.
     ///
     pub fn download(&self, filepath: PathBuf) -> Result<()> {
-        println!("Downloading torrent...");
         let peers = self.peers.to_owned();
         for peer in peers {
             let self_copy = self.clone();
             thread::spawn(move || {
-                self_copy.start_download(peer.clone());
+                self_copy.start_download(peer);
             });
         }
+
+        while 1 == 1 {}
 
         Ok(())
     }
@@ -294,12 +300,10 @@ impl Torrent {
     pub fn start_download(&self, peer: Peer) {
         let peer_id_copy = self.peer_id.clone();
         let info_hash_copy = self.info_hash.clone();
-        let client = match Client::new(&peer, peer_id_copy, info_hash_copy) {
-            Ok(client) => {
+        if let Ok(mut client) = Client::new(&peer, peer_id_copy, info_hash_copy) {
+            if client.handshake_with_peer().is_ok() {
                 println!("Connected to peer {:?}:{:?}", &peer.ip, &peer.port);
-                client;
             }
-            Err(_) => return,
-        };
+        }
     }
 }
