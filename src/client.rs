@@ -22,11 +22,13 @@ extern crate anyhow;
 extern crate url;
 
 use crate::handshake::*;
+use crate::message::*;
 use crate::peer::*;
 
 use anyhow::{anyhow, Result};
+use byteorder::{BigEndian, ReadBytesExt};
 
-use std::io::{Read, Write};
+use std::io::{Cursor, Read, Write};
 use std::net::{IpAddr, SocketAddr, TcpStream};
 use std::time::Duration;
 
@@ -76,40 +78,112 @@ impl Client {
         Ok(client)
     }
 
+    /// Read handshake length
+    pub fn read_handshake_len(&mut self) -> Result<u8> {
+        // Read 1 byte into buffer
+        let mut buf = [0; 1];
+        if self.conn.read_exact(&mut buf).is_err() {
+            return Err(anyhow!(
+                "could not read handshake length received from peer"
+            ));
+        }
+
+        // Get handshake length
+        let len = buf[0];
+        if len == 0 {
+            return Err(anyhow!("invalid handshake length received from peer"));
+        }
+
+        Ok(len)
+    }
+
     /// Handshake with remote peer.
     pub fn handshake_with_peer(&mut self) -> Result<()> {
-        let handshake = Handshake::new(self.peer_id.clone(), self.info_hash.clone())?;
-        let handshake_encoded: Vec<u8> = handshake.serialize()?;
+        // Create handshake
+        let peer_id = self.peer_id.clone();
+        let info_hash = self.info_hash.clone();
+        let handshake = Handshake::new(peer_id, info_hash)?;
 
-        // Send handshake message to peer
+        // Send handshake to remote peer
+        let handshake_encoded: Vec<u8> = handshake.serialize()?;
         if self.conn.write(&handshake_encoded).is_err() {
             return Err(anyhow!("could not send handshake to peer"));
         }
 
-        // Read buf size
-        let mut buf = [0; 1];
-        if self.conn.read_exact(&mut buf).is_err() {
+        // Read handshake received from remote peer
+        let handshake_len: u8 = self.read_handshake_len()?;
+        let mut handshake_buf: Vec<u8> = vec![0; 48 + handshake_len as usize];
+        if self.conn.read_exact(&mut handshake_buf).is_err() {
             return Err(anyhow!("could not parse handshake received from peer"));
         }
 
-        // Check buf size
-        let buf_size = buf[0];
-        if buf_size == 0 {
-            return Err(anyhow!("invalid handshake message received from peer"));
-        }
-
-        // Read handshake message received from peer
-        let mut buf: Vec<u8> = vec![0; 48 + buf_size as usize];
-        if self.conn.read_exact(&mut buf).is_err() {
-            return Err(anyhow!("could not parse handshake received from peer"));
-        }
-
-        // Deserialize handshake message
-        let handshake_decoded: Handshake = deserialize(&buf, buf_size)?;
-
-        // Check info hash received
+        // Check info hash received from remote peer
+        let handshake_decoded: Handshake = deserialize_handshake(&handshake_buf, handshake_len)?;
         if handshake_decoded.info_hash != self.info_hash {
             return Err(anyhow!("invalid handshake message received from peer"));
+        }
+
+        Ok(())
+    }
+
+    /// Read message length
+    pub fn read_message_len(&mut self) -> Result<u32> {
+        // Read bytes into buffer
+        let mut buf = [0; 4];
+        if self.conn.read_exact(&mut buf).is_err() {
+            return Err(anyhow!("could not read message length received from peer"));
+        }
+
+        // Get message length
+        let mut buf_cursor = Cursor::new(buf);
+        let len = buf_cursor.read_u32::<BigEndian>()?;
+        if len == 0 {
+            println!("Received keep-alive message");
+        }
+
+        Ok(len)
+    }
+
+    /// Read message from remote peer.
+    pub fn read_message(&mut self) -> Result<Message> {
+        let message_len: u32 = self.read_message_len()?;
+        let mut message_buf: Vec<u8> = vec![0; 4 + message_len as usize];
+        if self.conn.read_exact(&mut message_buf).is_err() {
+            return Err(anyhow!("could not parse message received from peer"));
+        }
+
+        let message: Message = deserialize_message(&message_buf, message_len)?;
+
+        Ok(message)
+    }
+
+    /// Receive bitfields from remote peer
+    pub fn receive_bitfield(&mut self) -> Result<()> {
+        let message: Message = self.read_message()?;
+        if message.id != MESSAGE_BITFIELD {
+            return Err(anyhow!("could not find bitfield message"));
+        }
+
+        Ok(())
+    }
+
+    // Send UNCHOKE message to remote peer
+    pub fn send_unchoke(&mut self) -> Result<()> {
+        let message: Message = Message::new(MESSAGE_UNCHOKE)?;
+        let message_encoded = message.serialize()?;
+        if self.conn.write(&message_encoded).is_err() {
+            return Err(anyhow!("could not send UNCHOKE message to peer"));
+        }
+
+        Ok(())
+    }
+
+    // Send INTERESTED message to remote peer
+    pub fn send_interested(&mut self) -> Result<()> {
+        let message: Message = Message::new(MESSAGE_INTERESTED)?;
+        let message_encoded = message.serialize()?;
+        if self.conn.write(&message_encoded).is_err() {
+            return Err(anyhow!("could not send INTERESTED message to peer"));
         }
 
         Ok(())

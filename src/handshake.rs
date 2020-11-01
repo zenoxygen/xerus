@@ -46,8 +46,11 @@ impl Handshake {
     /// * `info_hash` - 20-byte SHA-1 hash of the info key in the metainfo file.
     ///
     pub fn new(peer_id: Vec<u8>, info_hash: Vec<u8>) -> Result<Handshake> {
+        // Get pstr
         let pstr = String::from(PROTOCOL_ID).into_bytes();
+        // Get pstrlen
         let pstrlen = pstr.len() as u8;
+        // Get reserved
         let reserved: Vec<u8> = vec![0; 8];
 
         // Build handshake
@@ -65,13 +68,23 @@ impl Handshake {
     /// Serialize an handshake message.
     pub fn serialize(&self) -> Result<Vec<u8>> {
         let mut serialized: Vec<u8> = vec![];
+
+        // Add pstrlen
         serialized.push(self.pstrlen);
+
+        // Add pstr
         let mut pstr: Vec<u8> = self.pstr.clone();
         serialized.append(&mut pstr);
+
+        // Add reserved
         let mut reserved: Vec<u8> = self.reserved.clone();
         serialized.append(&mut reserved);
+
+        // Add info hash
         let mut info_hash: Vec<u8> = self.info_hash.clone();
         serialized.append(&mut info_hash);
+
+        // Add peer id
         let mut peer_id: Vec<u8> = self.peer_id.clone();
         serialized.append(&mut peer_id);
 
@@ -80,22 +93,32 @@ impl Handshake {
 }
 
 /// Deserialize an handshake message.
-pub fn deserialize(buf: &Vec<u8>, pstrlen: u8) -> Result<Handshake> {
+///
+/// # Arguments
+///
+/// * `buf_handshake` - Bytes containing an handshake message.
+/// * `pstrlen` - The length of the protocol identifier.
+///
+pub fn deserialize_handshake(buf_handshake: &Vec<u8>, pstrlen: u8) -> Result<Handshake> {
     let mut pstr = Vec::new();
+    let mut reserved = vec![0; 8];
     let mut info_hash = Vec::new();
     let mut peer_id = Vec::new();
-    let mut reserved = vec![0; 8];
 
-    for (i, x) in buf.iter().enumerate() {
+    for (i, x) in buf_handshake.iter().enumerate() {
+        // Get pstr
         if i < pstrlen as usize {
             pstr.push(x.to_owned());
         }
+        // Get reserved
         if i >= (pstrlen as usize) && i < (pstrlen as usize + 8) {
             reserved.push(x.to_owned());
         }
+        // Get info hash
         if i >= (pstrlen as usize + 8) && i < (pstrlen as usize + 8 + 20) {
             info_hash.push(x.to_owned());
         }
+        // Get peer id
         if i >= (pstrlen as usize + 8 + 20) {
             peer_id.push(x.to_owned());
         }

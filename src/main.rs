@@ -21,6 +21,7 @@
 mod args;
 mod client;
 mod handshake;
+mod message;
 mod peer;
 mod torrent;
 

@@ -286,7 +286,10 @@ impl Torrent {
             });
         }
 
-        while 1 == 1 {}
+        while 1 == 1 {
+            println!("Downloading torrent");
+            thread::sleep(Duration::from_secs(1));
+        }
 
         Ok(())
     }
@@ -303,6 +306,15 @@ impl Torrent {
         if let Ok(mut client) = Client::new(&peer, peer_id_copy, info_hash_copy) {
             if client.handshake_with_peer().is_ok() {
                 println!("Connected to peer {:?}:{:?}", &peer.ip, &peer.port);
+            }
+            if client.receive_bitfield().is_ok() {
+                println!("Received bitfield from {:?}:{:?}", &peer.ip, &peer.port);
+            }
+            if client.send_unchoke().is_ok() {
+                println!("Send UNCHOKE message to {:?}:{:?}", &peer.ip, &peer.port);
+            }
+            if client.send_interested().is_ok() {
+                println!("Send INTERESTED message to {:?}:{:?}", &peer.ip, &peer.port);
             }
         }
     }
