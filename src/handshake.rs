@@ -19,12 +19,10 @@
 // SOFTWARE.
 
 use anyhow::Result;
-use serde::{Deserialize, Serialize};
 
 const PROTOCOL_ID: &str = "BitTorrent protocol";
 
 /// Handshake structure.
-#[derive(Deserialize, Serialize)]
 pub struct Handshake {
     pub pstrlen: u8,
     // String identifier of the protocol
