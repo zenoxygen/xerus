@@ -37,9 +37,9 @@ pub const MESSAGE_PORT: MessageId = 9;
 #[derive(Default)]
 pub struct Message {
     // Message type
-    pub id: MessageId,
+    id: MessageId,
     // Message content
-    pub payload: Vec<u8>,
+    payload: Vec<u8>,
 }
 
 impl Message {
@@ -72,8 +72,13 @@ impl Message {
         Ok(message)
     }
 
+    /// Get message id.
+    pub fn get_id(self) -> MessageId {
+        self.id
+    }
+
     /// Serialize message.
-    pub fn serialize(&self) -> Result<Vec<u8>> {
+    pub fn serialize(self) -> Result<Vec<u8>> {
         let message_len = 1 + self.payload.len();
         let mut serialized: Vec<u8> = vec![0; 4 + message_len];
 

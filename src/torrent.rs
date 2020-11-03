@@ -279,10 +279,12 @@ impl Torrent {
     ///
     pub fn download(&self, filepath: PathBuf) -> Result<()> {
         let peers = self.peers.to_owned();
+
+        // Start workers
         for peer in peers {
             let self_copy = self.clone();
             thread::spawn(move || {
-                self_copy.start_download(peer);
+                self_copy.start_worker(peer);
             });
         }
 
@@ -294,13 +296,13 @@ impl Torrent {
         Ok(())
     }
 
-    /// Start download file.
+    /// Start worker.
     ///
     /// # Arguments
     ///
     /// * `peer` - A remote peer.
     ///
-    pub fn start_download(&self, peer: Peer) {
+    pub fn start_worker(&self, peer: Peer) {
         let peer_id_copy = self.peer_id.clone();
         let info_hash_copy = self.info_hash.clone();
         if let Ok(mut client) = Client::new(&peer, peer_id_copy, info_hash_copy) {
@@ -311,10 +313,10 @@ impl Torrent {
                 println!("Received bitfield from {:?}:{:?}", &peer.ip, &peer.port);
             }
             if client.send_unchoke().is_ok() {
-                println!("Send UNCHOKE message to {:?}:{:?}", &peer.ip, &peer.port);
+                println!("Sent MESSAGE_UNCHOKE to {:?}:{:?}", &peer.ip, &peer.port);
             }
             if client.send_interested().is_ok() {
-                println!("Send INTERESTED message to {:?}:{:?}", &peer.ip, &peer.port);
+                println!("Sent MESSAGE_INTERESTED to {:?}:{:?}", &peer.ip, &peer.port);
             }
         }
     }

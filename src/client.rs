@@ -119,7 +119,7 @@ impl Client {
 
         // Check info hash received from remote peer
         let handshake_decoded: Handshake = deserialize_handshake(&handshake_buf, handshake_len)?;
-        if handshake_decoded.info_hash != self.info_hash {
+        if handshake_decoded.get_info_hash() != self.info_hash {
             return Err(anyhow!("invalid handshake message received from peer"));
         }
 
@@ -160,7 +160,7 @@ impl Client {
     /// Receive bitfields from remote peer
     pub fn receive_bitfield(&mut self) -> Result<()> {
         let message: Message = self.read_message()?;
-        if message.id != MESSAGE_BITFIELD {
+        if message.get_id() != MESSAGE_BITFIELD {
             return Err(anyhow!("could not find MESSAGE_BITFIELD"));
         }
 
