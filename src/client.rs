@@ -161,7 +161,18 @@ impl Client {
     pub fn receive_bitfield(&mut self) -> Result<()> {
         let message: Message = self.read_message()?;
         if message.id != MESSAGE_BITFIELD {
-            return Err(anyhow!("could not find bitfield message"));
+            return Err(anyhow!("could not find MESSAGE_BITFIELD"));
+        }
+
+        Ok(())
+    }
+
+    // Send CHOKE message to remote peer
+    pub fn send_choke(&mut self) -> Result<()> {
+        let message: Message = Message::new(MESSAGE_CHOKE)?;
+        let message_encoded = message.serialize()?;
+        if self.conn.write(&message_encoded).is_err() {
+            return Err(anyhow!("could not send MESSAGE_CHOKE to peer"));
         }
 
         Ok(())
@@ -172,7 +183,7 @@ impl Client {
         let message: Message = Message::new(MESSAGE_UNCHOKE)?;
         let message_encoded = message.serialize()?;
         if self.conn.write(&message_encoded).is_err() {
-            return Err(anyhow!("could not send UNCHOKE message to peer"));
+            return Err(anyhow!("could not send MESSAGE_UNCHOKE to peer"));
         }
 
         Ok(())
@@ -183,7 +194,83 @@ impl Client {
         let message: Message = Message::new(MESSAGE_INTERESTED)?;
         let message_encoded = message.serialize()?;
         if self.conn.write(&message_encoded).is_err() {
-            return Err(anyhow!("could not send INTERESTED message to peer"));
+            return Err(anyhow!("could not send MESSAGE_INTERESTED to peer"));
+        }
+
+        Ok(())
+    }
+
+    // Send NOT INTERESTED message to remote peer
+    pub fn send_not_interested(&mut self) -> Result<()> {
+        let message: Message = Message::new(MESSAGE_NOT_INTERESTED)?;
+        let message_encoded = message.serialize()?;
+        if self.conn.write(&message_encoded).is_err() {
+            return Err(anyhow!("could not send MESSAGE_NOT_INTERESTED to peer"));
+        }
+
+        Ok(())
+    }
+    // Send HAVE message to remote peer
+    pub fn send_have(&mut self) -> Result<()> {
+        let message: Message = Message::new(MESSAGE_HAVE)?;
+        let message_encoded = message.serialize()?;
+        if self.conn.write(&message_encoded).is_err() {
+            return Err(anyhow!("could not send MESSAGE_HAVE to peer"));
+        }
+
+        Ok(())
+    }
+
+    // Send BITFIELD message to remote peer
+    pub fn send_bitfield(&mut self) -> Result<()> {
+        let message: Message = Message::new(MESSAGE_BITFIELD)?;
+        let message_encoded = message.serialize()?;
+        if self.conn.write(&message_encoded).is_err() {
+            return Err(anyhow!("could not send MESSAGE_BITFIELD to peer"));
+        }
+
+        Ok(())
+    }
+
+    // Send REQUEST message to remote peer
+    pub fn send_request(&mut self) -> Result<()> {
+        let message: Message = Message::new(MESSAGE_REQUEST)?;
+        let message_encoded = message.serialize()?;
+        if self.conn.write(&message_encoded).is_err() {
+            return Err(anyhow!("could not send MESSAGE_REQUEST to peer"));
+        }
+
+        Ok(())
+    }
+
+    // Send PIECE message to remote peer
+    pub fn send_piece(&mut self) -> Result<()> {
+        let message: Message = Message::new(MESSAGE_PIECE)?;
+        let message_encoded = message.serialize()?;
+        if self.conn.write(&message_encoded).is_err() {
+            return Err(anyhow!("could not send MESSAGE_PIECE to peer"));
+        }
+
+        Ok(())
+    }
+
+    // Send CANCEL message to remote peer
+    pub fn send_cancel(&mut self) -> Result<()> {
+        let message: Message = Message::new(MESSAGE_CANCEL)?;
+        let message_encoded = message.serialize()?;
+        if self.conn.write(&message_encoded).is_err() {
+            return Err(anyhow!("could not send MESSAGE_CANCEL to peer"));
+        }
+
+        Ok(())
+    }
+
+    // Send PORT message to remote peer
+    pub fn send_port(&mut self) -> Result<()> {
+        let message: Message = Message::new(MESSAGE_PORT)?;
+        let message_encoded = message.serialize()?;
+        if self.conn.write(&message_encoded).is_err() {
+            return Err(anyhow!("could not send MESSAGE_PORT to peer"));
         }
 
         Ok(())
