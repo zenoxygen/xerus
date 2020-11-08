@@ -22,6 +22,7 @@ use anyhow::Result;
 use byteorder::{BigEndian, ByteOrder};
 
 type MessageId = u8;
+type MessagePayload = Vec<u8>;
 
 pub const MESSAGE_CHOKE: MessageId = 0;
 pub const MESSAGE_UNCHOKE: MessageId = 1;
@@ -38,8 +39,8 @@ pub const MESSAGE_PORT: MessageId = 9;
 pub struct Message {
     // Message type
     id: MessageId,
-    // Message content
-    payload: Vec<u8>,
+    // Message payload
+    payload: MessagePayload,
 }
 
 impl Message {
@@ -49,8 +50,8 @@ impl Message {
     ///
     /// * `id` - The type of the message.
     ///
-    pub fn new(id: u8) -> Result<Message> {
-        let payload: Vec<u8> = vec![];
+    pub fn new(id: MessageId) -> Result<Message> {
+        let payload: MessagePayload = vec![];
 
         // Build message
         let message = Message { id, payload };
@@ -65,7 +66,7 @@ impl Message {
     /// * `id` - The type of the message.
     /// * `payload` - The content of the message.
     ///
-    pub fn new_with_payload(id: u8, payload: Vec<u8>) -> Result<Message> {
+    pub fn new_with_payload(id: MessageId, payload: MessagePayload) -> Result<Message> {
         // Build message
         let message = Message { id, payload };
 
@@ -73,12 +74,17 @@ impl Message {
     }
 
     /// Get message id.
-    pub fn get_id(self) -> MessageId {
+    pub fn get_id(&self) -> MessageId {
         self.id
     }
 
+    /// Get message payload.
+    pub fn get_payload(&self) -> MessagePayload {
+        self.payload.to_vec()
+    }
+
     /// Serialize message.
-    pub fn serialize(self) -> Result<Vec<u8>> {
+    pub fn serialize(&self) -> Result<Vec<u8>> {
         let message_len = 1 + self.payload.len();
         let mut serialized: Vec<u8> = vec![0; 4 + message_len];
 
@@ -101,10 +107,10 @@ impl Message {
 /// Deserialize message.
 pub fn deserialize_message(buf_message: &Vec<u8>, len: u32) -> Result<Message> {
     // Get id
-    let id: u8 = buf_message[0];
+    let id: MessageId = buf_message[0];
 
     // Get payload
-    let mut payload = Vec::new();
+    let mut payload: MessagePayload = Vec::new();
     for (i, x) in buf_message.iter().enumerate() {
         if i > 0 && i < (len as usize) {
             payload.push(x.to_owned());

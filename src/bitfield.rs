@@ -18,50 +18,35 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-mod args;
-mod bitfield;
-mod client;
-mod download;
-mod handshake;
-mod message;
-mod peer;
-mod piece;
-mod torrent;
+/// A Bitfield represents the pieces a peer has.
+pub type Bitfield = Vec<u8>;
 
-use std::path::{Path, PathBuf};
+/// Check if bitfield has a piece index.
+pub fn has_piece(bitfield: &mut Bitfield, index: usize) -> bool {
+    let byte_index = index / 8;
+    let offset = index % 8;
+    let bitfield_len = bitfield.len() as usize;
 
-use anyhow::{anyhow, Result};
-
-use args::parse_args;
-use torrent::*;
-
-fn run(args: clap::ArgMatches) -> Result<()> {
-    let torrent = args.value_of("torrent").unwrap();
-    let file = args.value_of("file").unwrap();
-
-    // Open and download torrent
-    if Path::new(&torrent).exists() {
-        let torrent_filepath = PathBuf::from(torrent);
-        let output_filepath = PathBuf::from(file);
-        let mut torrent = Torrent::new();
-        torrent.open(torrent_filepath)?;
-        torrent.download(output_filepath)?;
+    // Prevent unbounded values
+    if byte_index >= bitfield_len {
+        false
     } else {
-        return Err(anyhow!("could not find torrent"));
+        bitfield[byte_index] >> (7 - offset) as u8 & 1 != 0
     }
-    Ok(())
 }
 
-fn main() {
-    // Parse arguments
-    let args = parse_args();
+/// Set a piece into bitfield.
+pub fn set_piece(bitfield: &Bitfield, index: usize) -> Bitfield {
+    let byte_index = index / 8;
+    let offset = index % 8;
+    let bitfield_len = bitfield.len() as usize;
+    let mut new_bitfield = bitfield.to_vec();
 
-    // Run program, eventually exit failure
-    if let Err(error) = run(args) {
-        eprintln!("Error: {}", error);
-        std::process::exit(1);
+    // Prevent unbounded values
+    if byte_index >= bitfield_len {
+        new_bitfield
+    } else {
+        new_bitfield[byte_index] |= (1 << (7 - offset)) as u8;
+        new_bitfield
     }
-
-    // Exit success
-    std::process::exit(0);
 }

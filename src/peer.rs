@@ -20,6 +20,8 @@
 
 extern crate anyhow;
 
+use crate::torrent::*;
+
 use anyhow::{anyhow, Result};
 use byteorder::{BigEndian, ReadBytesExt};
 
@@ -35,46 +37,62 @@ pub struct Peer {
     pub port: u16,
 }
 
-/// Build peers.
-///
-/// # Arguments
-///
-/// * `tracker_peers` - A string consisting of multiples of 6 bytes.
-/// First 4 bytes are the IP address and last 2 bytes are the port number.
-/// All in network (big endian) notation.
-///
-pub fn build_peers(tracker_peers: Vec<u8>) -> Result<Vec<Peer>> {
-    // Check torrent peers
-    if tracker_peers.len() % PEER_SIZE != 0 {
-        return Err(anyhow!("received invalid peers from tracker"));
-    }
-
-    // Build peers
-    let nb_peers = tracker_peers.len() / PEER_SIZE;
-    let mut peers: Vec<Peer> = vec![
+impl Peer {
+    /// Build a new peer.
+    pub fn new() -> Peer {
         Peer {
             ip: Ipv4Addr::new(1, 1, 1, 1),
-            port: 0
-        };
-        nb_peers
-    ];
-
-    // Add IP address and port
-    let mut port = vec![];
-    for i in 0..nb_peers {
-        let offset = i * PEER_SIZE;
-        peers[i].ip = Ipv4Addr::new(
-            tracker_peers[offset],
-            tracker_peers[offset + 1],
-            tracker_peers[offset + 2],
-            tracker_peers[offset + 3],
-        );
-        port.push(tracker_peers[offset + 4]);
-        port.push(tracker_peers[offset + 5]);
-        let mut port_cursor = Cursor::new(port);
-        peers[i].port = port_cursor.read_u16::<BigEndian>()?;
-        port = vec![];
+            port: 0,
+        }
     }
 
-    Ok(peers)
+    /// Get peer ip.
+    pub fn get_ip(&self) -> Ipv4Addr {
+        self.ip
+    }
+
+    /// Get peer port.
+    pub fn get_port(&self) -> u16 {
+        self.port
+    }
+}
+
+impl Torrent {
+    /// Build peers.
+    ///
+    /// # Arguments
+    ///
+    /// * `tracker_peers` - A string consisting of multiples of 6 bytes.
+    /// First 4 bytes are the IP address and last 2 bytes are the port number.
+    /// All in network (big endian) notation.
+    ///
+    pub fn build_peers(&self, tracker_peers: Vec<u8>) -> Result<Vec<Peer>> {
+        // Check torrent peers
+        if tracker_peers.len() % PEER_SIZE != 0 {
+            return Err(anyhow!("received invalid peers from tracker"));
+        }
+
+        // Build peers
+        let nb_peers = tracker_peers.len() / PEER_SIZE;
+        let mut peers: Vec<Peer> = vec![Peer::new(); nb_peers];
+
+        // Add IP address and port
+        let mut port = vec![];
+        for i in 0..nb_peers {
+            let offset = i * PEER_SIZE;
+            peers[i].ip = Ipv4Addr::new(
+                tracker_peers[offset],
+                tracker_peers[offset + 1],
+                tracker_peers[offset + 2],
+                tracker_peers[offset + 3],
+            );
+            port.push(tracker_peers[offset + 4]);
+            port.push(tracker_peers[offset + 5]);
+            let mut port_cursor = Cursor::new(port);
+            peers[i].port = port_cursor.read_u16::<BigEndian>()?;
+            port = vec![];
+        }
+
+        Ok(peers)
+    }
 }

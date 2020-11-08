@@ -34,9 +34,14 @@ use std::time::Duration;
 
 /// Client structure.
 pub struct Client {
+    // A peer
+    peer: Peer,
+    // Torrent peer id
     peer_id: Vec<u8>,
+    // Torrent info hash
     info_hash: Vec<u8>,
-    pub conn: TcpStream,
+    // Connection to peer
+    conn: TcpStream,
 }
 
 impl Client {
@@ -47,29 +52,17 @@ impl Client {
     /// * `peer_id` - Urlencoded 20-byte string used as a unique ID for the client.
     /// * `info_hash` - 20-byte SHA-1 hash of the info key in the metainfo file.
     ///
-    pub fn new(peer: &Peer, peer_id: Vec<u8>, info_hash: Vec<u8>) -> Result<Client> {
+    pub fn new(peer: Peer, peer_id: Vec<u8>, info_hash: Vec<u8>) -> Result<Client> {
         // Open connection with remote peer
-        let peer_socket = SocketAddr::new(IpAddr::V4(peer.ip), peer.port);
+        let peer_socket = SocketAddr::new(IpAddr::V4(peer.get_ip()), peer.get_port());
         let conn = match TcpStream::connect_timeout(&peer_socket, Duration::from_secs(15)) {
             Ok(conn) => conn,
             Err(_) => return Err(anyhow!("could not connect to peer")),
         };
 
-        // Set write timeout
-        if conn
-            .set_write_timeout(Some(Duration::from_secs(3)))
-            .is_err()
-        {
-            return Err(anyhow!("could not set write timeout"));
-        }
-
-        // Set read timeout
-        if conn.set_read_timeout(Some(Duration::from_secs(3))).is_err() {
-            return Err(anyhow!("could not set read timeout"));
-        }
-
         // Return new client
         let client = Client {
+            peer,
             peer_id,
             info_hash,
             conn,
@@ -78,27 +71,39 @@ impl Client {
         Ok(client)
     }
 
-    /// Read handshake length
-    pub fn read_handshake_len(&mut self) -> Result<u8> {
-        // Read 1 byte into buffer
-        let mut buf = [0; 1];
-        if self.conn.read_exact(&mut buf).is_err() {
-            return Err(anyhow!(
-                "could not read handshake length received from peer"
-            ));
+    /// Set connection timeout.
+    ///
+    /// # Arguments
+    ///
+    /// * `seconds` - The timeout in seconds.
+    ///
+    pub fn set_connection_timeout(&self, seconds: u64) -> Result<()> {
+        // Set write timeout
+        if self
+            .conn
+            .set_write_timeout(Some(Duration::from_secs(seconds)))
+            .is_err()
+        {
+            return Err(anyhow!("could not set write timeout"));
         }
 
-        // Get handshake length
-        let len = buf[0];
-        if len == 0 {
-            return Err(anyhow!("invalid handshake length received from peer"));
+        // Set read timeout
+        if self
+            .conn
+            .set_read_timeout(Some(Duration::from_secs(seconds)))
+            .is_err()
+        {
+            return Err(anyhow!("could not set read timeout"));
         }
 
-        Ok(len)
+        Ok(())
     }
 
     /// Handshake with remote peer.
     pub fn handshake_with_peer(&mut self) -> Result<()> {
+        // Set connection timeout
+        self.set_connection_timeout(3)?;
+
         // Create handshake
         let peer_id = self.peer_id.clone();
         let info_hash = self.info_hash.clone();
@@ -126,26 +131,27 @@ impl Client {
         Ok(())
     }
 
-    /// Read message length
-    pub fn read_message_len(&mut self) -> Result<u32> {
-        // Read bytes into buffer
-        let mut buf = [0; 4];
+    /// Read handshake length
+    fn read_handshake_len(&mut self) -> Result<u8> {
+        // Read 1 byte into buffer
+        let mut buf = [0; 1];
         if self.conn.read_exact(&mut buf).is_err() {
-            return Err(anyhow!("could not read message length received from peer"));
+            return Err(anyhow!(
+                "could not read handshake length received from peer"
+            ));
         }
 
-        // Get message length
-        let mut buf_cursor = Cursor::new(buf);
-        let len = buf_cursor.read_u32::<BigEndian>()?;
+        // Get handshake length
+        let len = buf[0];
         if len == 0 {
-            println!("Received keep-alive message");
+            return Err(anyhow!("invalid handshake length received from peer"));
         }
 
         Ok(len)
     }
 
     /// Read message from remote peer.
-    pub fn read_message(&mut self) -> Result<Message> {
+    fn read_message(&mut self) -> Result<Message> {
         let message_len: u32 = self.read_message_len()?;
         let mut message_buf: Vec<u8> = vec![0; 4 + message_len as usize];
         if self.conn.read_exact(&mut message_buf).is_err() {
@@ -157,20 +163,45 @@ impl Client {
         Ok(message)
     }
 
-    /// Receive bitfields from remote peer
-    pub fn receive_bitfield(&mut self) -> Result<()> {
-        let message: Message = self.read_message()?;
-        if message.get_id() != MESSAGE_BITFIELD {
-            return Err(anyhow!("could not find MESSAGE_BITFIELD"));
+    /// Read message length.
+    fn read_message_len(&mut self) -> Result<u32> {
+        // Read bytes into buffer
+        let mut buf = [0; 4];
+        if self.conn.read_exact(&mut buf).is_err() {
+            return Err(anyhow!("could not read message length received from peer"));
         }
 
-        Ok(())
+        // Get message length
+        let mut buf_cursor = Cursor::new(buf);
+        let len = buf_cursor.read_u32::<BigEndian>()?;
+
+        // If message length is 0, it's a keep-alive
+        if len == 0 {
+            println!("Received keep-alive message");
+        }
+
+        Ok(len)
     }
 
-    // Send CHOKE message to remote peer
+    /// Read BITFIELD message from remote peer.
+    pub fn read_bitfield(&mut self) -> Result<Message> {
+        println!("Read bitfield from {:?}:{:?}", self.peer.ip, self.peer.port);
+        let message: Message = self.read_message()?;
+        if message.get_id() != MESSAGE_BITFIELD {
+            return Err(anyhow!("could not read MESSAGE_BITFIELD from peer"));
+        }
+
+        Ok(message)
+    }
+
+    /// Send CHOKE message to remote peer.
     pub fn send_choke(&mut self) -> Result<()> {
         let message: Message = Message::new(MESSAGE_CHOKE)?;
         let message_encoded = message.serialize()?;
+        println!(
+            "Send MESSAGE_CHOKE to {:?}:{:?}",
+            self.peer.ip, self.peer.port
+        );
         if self.conn.write(&message_encoded).is_err() {
             return Err(anyhow!("could not send MESSAGE_CHOKE to peer"));
         }
@@ -178,10 +209,14 @@ impl Client {
         Ok(())
     }
 
-    // Send UNCHOKE message to remote peer
+    /// Send UNCHOKE message to remote peer.
     pub fn send_unchoke(&mut self) -> Result<()> {
         let message: Message = Message::new(MESSAGE_UNCHOKE)?;
         let message_encoded = message.serialize()?;
+        println!(
+            "Send MESSAGE_UNCHOKE to {:?}:{:?}",
+            self.peer.ip, self.peer.port
+        );
         if self.conn.write(&message_encoded).is_err() {
             return Err(anyhow!("could not send MESSAGE_UNCHOKE to peer"));
         }
@@ -189,10 +224,14 @@ impl Client {
         Ok(())
     }
 
-    // Send INTERESTED message to remote peer
+    /// Send INTERESTED message to remote peer.
     pub fn send_interested(&mut self) -> Result<()> {
         let message: Message = Message::new(MESSAGE_INTERESTED)?;
         let message_encoded = message.serialize()?;
+        println!(
+            "Send MESSAGE_INTERESTED to {:?}:{:?}",
+            self.peer.ip, self.peer.port
+        );
         if self.conn.write(&message_encoded).is_err() {
             return Err(anyhow!("could not send MESSAGE_INTERESTED to peer"));
         }
@@ -200,20 +239,29 @@ impl Client {
         Ok(())
     }
 
-    // Send NOT INTERESTED message to remote peer
+    /// Send NOT INTERESTED message to remote peer.
     pub fn send_not_interested(&mut self) -> Result<()> {
         let message: Message = Message::new(MESSAGE_NOT_INTERESTED)?;
         let message_encoded = message.serialize()?;
+        println!(
+            "Send MESSAGE_NOT_INTERESTED to {:?}:{:?}",
+            self.peer.ip, self.peer.port
+        );
         if self.conn.write(&message_encoded).is_err() {
             return Err(anyhow!("could not send MESSAGE_NOT_INTERESTED to peer"));
         }
 
         Ok(())
     }
-    // Send HAVE message to remote peer
+
+    /// Send HAVE message to remote peer.
     pub fn send_have(&mut self) -> Result<()> {
         let message: Message = Message::new(MESSAGE_HAVE)?;
         let message_encoded = message.serialize()?;
+        println!(
+            "Send MESSAGE_HAVE to {:?}:{:?}",
+            self.peer.ip, self.peer.port
+        );
         if self.conn.write(&message_encoded).is_err() {
             return Err(anyhow!("could not send MESSAGE_HAVE to peer"));
         }
@@ -221,10 +269,14 @@ impl Client {
         Ok(())
     }
 
-    // Send BITFIELD message to remote peer
+    /// Send BITFIELD message to remote peer.
     pub fn send_bitfield(&mut self) -> Result<()> {
         let message: Message = Message::new(MESSAGE_BITFIELD)?;
         let message_encoded = message.serialize()?;
+        println!(
+            "Send MESSAGE_BITFIELD Tto {:?}:{:?}",
+            self.peer.ip, self.peer.port
+        );
         if self.conn.write(&message_encoded).is_err() {
             return Err(anyhow!("could not send MESSAGE_BITFIELD to peer"));
         }
@@ -232,10 +284,14 @@ impl Client {
         Ok(())
     }
 
-    // Send REQUEST message to remote peer
+    /// Send REQUEST message to remote peer.
     pub fn send_request(&mut self) -> Result<()> {
         let message: Message = Message::new(MESSAGE_REQUEST)?;
         let message_encoded = message.serialize()?;
+        println!(
+            "Send MESSAGE_REQUEST to {:?}:{:?}",
+            self.peer.ip, self.peer.port
+        );
         if self.conn.write(&message_encoded).is_err() {
             return Err(anyhow!("could not send MESSAGE_REQUEST to peer"));
         }
@@ -243,10 +299,14 @@ impl Client {
         Ok(())
     }
 
-    // Send PIECE message to remote peer
+    /// Send PIECE message to remote peer.
     pub fn send_piece(&mut self) -> Result<()> {
         let message: Message = Message::new(MESSAGE_PIECE)?;
         let message_encoded = message.serialize()?;
+        println!(
+            "Send MESSAGE_PIECE to {:?}:{:?}",
+            self.peer.ip, self.peer.port
+        );
         if self.conn.write(&message_encoded).is_err() {
             return Err(anyhow!("could not send MESSAGE_PIECE to peer"));
         }
@@ -254,10 +314,14 @@ impl Client {
         Ok(())
     }
 
-    // Send CANCEL message to remote peer
+    /// Send CANCEL message to remote peer.
     pub fn send_cancel(&mut self) -> Result<()> {
         let message: Message = Message::new(MESSAGE_CANCEL)?;
         let message_encoded = message.serialize()?;
+        println!(
+            "Send MESSAGE_CANCEL to {:?}:{:?}",
+            self.peer.ip, self.peer.port
+        );
         if self.conn.write(&message_encoded).is_err() {
             return Err(anyhow!("could not send MESSAGE_CANCEL to peer"));
         }
@@ -265,10 +329,14 @@ impl Client {
         Ok(())
     }
 
-    // Send PORT message to remote peer
+    /// Send PORT message to remote peer.
     pub fn send_port(&mut self) -> Result<()> {
         let message: Message = Message::new(MESSAGE_PORT)?;
         let message_encoded = message.serialize()?;
+        println!(
+            "Send MESSAGE_PORT to {:?}:{:?}",
+            self.peer.ip, self.peer.port
+        );
         if self.conn.write(&message_encoded).is_err() {
             return Err(anyhow!("could not send MESSAGE_PORT to peer"));
         }

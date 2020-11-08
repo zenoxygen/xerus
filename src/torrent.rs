@@ -25,7 +25,6 @@ extern crate serde;
 extern crate serde_bencode;
 extern crate url;
 
-use crate::client::*;
 use crate::peer::*;
 
 use anyhow::{anyhow, Result};
@@ -42,7 +41,6 @@ use std::borrow::Cow;
 use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
-use std::thread;
 use std::time::Duration;
 
 const PORT: u16 = 6881;
@@ -52,21 +50,21 @@ const SHA1_HASH_SIZE: usize = 20;
 #[derive(Default, Clone)]
 pub struct Torrent {
     // URL of the tracker
-    announce: String,
+    pub announce: String,
     // 20-byte SHA-1 hash calculated over the content of the bencoded info dictionary
-    info_hash: Vec<u8>,
+    pub info_hash: Vec<u8>,
     // SHA-1 hashes of each pieces
-    pieces_hashes: Vec<Vec<u8>>,
+    pub pieces_hashes: Vec<Vec<u8>>,
     // Size of each piece in bytes
-    piece_length: u32,
+    pub piece_length: u32,
     // Size of the file in bytes
-    length: u32,
+    pub length: u32,
     // Suggested filename where to save the file
-    name: String,
+    pub name: String,
     // Urlencoded 20-byte string used as unique client ID
-    peer_id: Vec<u8>,
+    pub peer_id: Vec<u8>,
     // Peers
-    peers: Vec<Peer>,
+    pub peers: Vec<Peer>,
 }
 
 /// BencodeInfo structure.
@@ -107,20 +105,22 @@ struct BencodeTracker {
 
 impl BencodeInfo {
     /// Hash bencoded informations to uniquely identify a file.
-    pub fn hash(&self) -> Result<Vec<u8>> {
+    fn hash(&self) -> Result<Vec<u8>> {
         // Serialize bencoded informations
         let buf: Vec<u8> = ser::to_bytes::<BencodeInfo>(self)?;
         // Hash bencoded informations
         let mut hasher = Sha1::new();
         hasher.input(&buf);
+        // Read hash digest
         let hex = hasher.result_str();
+        // Decoded hex string into bytes
         let decoded: Vec<u8> = hex::decode(hex)?;
 
         Ok(decoded)
     }
 
     /// Split bencoded pieces into vectors of SHA-1 hashes.
-    pub fn split_pieces_hashes(&self) -> Result<Vec<Vec<u8>>> {
+    fn split_pieces_hashes(&self) -> Result<Vec<Vec<u8>>> {
         let pieces = self.pieces.to_owned();
         let nb_pieces = pieces.len();
         // Check torrent pieces
@@ -129,6 +129,7 @@ impl BencodeInfo {
         }
         let nb_hashes = nb_pieces / SHA1_HASH_SIZE;
         let mut hashes: Vec<Vec<u8>> = vec![vec![0; 20]; nb_hashes];
+        // Split pieces
         for i in 0..nb_hashes {
             hashes[i] = pieces[i * SHA1_HASH_SIZE..(i + 1) * SHA1_HASH_SIZE].to_vec();
         }
@@ -194,7 +195,7 @@ impl Torrent {
     /// * `peer_id` - Urlencoded 20-byte string used as a unique ID for the client.
     /// * `port` - Port number that the client is listening on.
     ///
-    pub fn request_peers(&self, peer_id: Vec<u8>, port: u16) -> Result<Vec<Peer>> {
+    fn request_peers(&self, peer_id: Vec<u8>, port: u16) -> Result<Vec<Peer>> {
         // Build tracker URL
         let tracker_url = match self.build_tracker_url(peer_id, port) {
             Ok(url) => url,
@@ -217,7 +218,7 @@ impl Torrent {
         };
 
         // Build peers from tracker response
-        let peers: Vec<Peer> = match build_peers(tracker_bencode.peers.to_vec()) {
+        let peers: Vec<Peer> = match self.build_peers(tracker_bencode.peers.to_vec()) {
             Ok(peers) => peers,
             Err(_) => return Err(anyhow!("could not build peers")),
         };
@@ -232,7 +233,7 @@ impl Torrent {
     /// * `peer_id` - Urlencoded 20-byte string used as a unique ID for the client.
     /// * `port` - Port number that the client is listening on.
     ///
-    pub fn build_tracker_url(&self, peer_id: Vec<u8>, port: u16) -> Result<String> {
+    fn build_tracker_url(&self, peer_id: Vec<u8>, port: u16) -> Result<String> {
         // Parse tracker URL from torrent
         let mut base_url = match Url::parse(&self.announce) {
             Ok(url) => url,
@@ -241,6 +242,7 @@ impl Torrent {
 
         // Add parameters to the tracker URL
         base_url
+            // Add info hash
             .query_pairs_mut()
             .encoding_override(Some(&|input| {
                 if input != "!" {
@@ -251,6 +253,7 @@ impl Torrent {
             }))
             .append_pair("info_hash", "!");
         base_url
+            // Add peer id
             .query_pairs_mut()
             .encoding_override(Some(&|input| {
                 if input != "!" {
@@ -262,62 +265,17 @@ impl Torrent {
             .append_pair("peer_id", "!");
         base_url
             .query_pairs_mut()
+            // Add port
             .append_pair("port", &port.to_string())
+            // Add uploaded
             .append_pair("uploaded", "0")
+            // Add downloaded
             .append_pair("downloaded", "0")
+            // Add compact
             .append_pair("compact", "1")
+            // Add left
             .append_pair("left", &self.length.to_string());
 
         Ok(base_url.to_string())
-    }
-
-    /// Download torrent.
-    ///
-    /// # Arguments
-    ///
-    /// * `filepath` - Path where to save the file.
-    ///
-    pub fn download(&self, filepath: PathBuf) -> Result<()> {
-        let peers = self.peers.to_owned();
-
-        // Start workers
-        for peer in peers {
-            let self_copy = self.clone();
-            thread::spawn(move || {
-                self_copy.start_worker(peer);
-            });
-        }
-
-        while 1 == 1 {
-            println!("Downloading torrent");
-            thread::sleep(Duration::from_secs(1));
-        }
-
-        Ok(())
-    }
-
-    /// Start worker.
-    ///
-    /// # Arguments
-    ///
-    /// * `peer` - A remote peer.
-    ///
-    pub fn start_worker(&self, peer: Peer) {
-        let peer_id_copy = self.peer_id.clone();
-        let info_hash_copy = self.info_hash.clone();
-        if let Ok(mut client) = Client::new(&peer, peer_id_copy, info_hash_copy) {
-            if client.handshake_with_peer().is_ok() {
-                println!("Connected to peer {:?}:{:?}", &peer.ip, &peer.port);
-            }
-            if client.receive_bitfield().is_ok() {
-                println!("Received bitfield from {:?}:{:?}", &peer.ip, &peer.port);
-            }
-            if client.send_unchoke().is_ok() {
-                println!("Sent MESSAGE_UNCHOKE to {:?}:{:?}", &peer.ip, &peer.port);
-            }
-            if client.send_interested().is_ok() {
-                println!("Sent MESSAGE_INTERESTED to {:?}:{:?}", &peer.ip, &peer.port);
-            }
-        }
     }
 }
