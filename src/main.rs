@@ -19,14 +19,13 @@
 // SOFTWARE.
 
 mod args;
-mod bitfield;
 mod client;
-mod download;
 mod handshake;
 mod message;
 mod peer;
 mod piece;
 mod torrent;
+mod worker;
 
 use std::path::{Path, PathBuf};
 

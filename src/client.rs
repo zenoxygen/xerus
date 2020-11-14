@@ -24,6 +24,7 @@ extern crate url;
 use crate::handshake::*;
 use crate::message::*;
 use crate::peer::*;
+use crate::piece::*;
 
 use anyhow::{anyhow, Result};
 use byteorder::{BigEndian, ReadBytesExt};
@@ -42,6 +43,10 @@ pub struct Client {
     info_hash: Vec<u8>,
     // Connection to peer
     conn: TcpStream,
+    // Bitfield of pieces
+    bitfield: Vec<u8>,
+    // Peer has choked this client
+    choked: bool,
 }
 
 impl Client {
@@ -66,22 +71,68 @@ impl Client {
             peer_id,
             info_hash,
             conn,
+            bitfield: vec![],
+            choked: true,
         };
 
         Ok(client)
+    }
+
+    // Return choked value.
+    pub fn is_choked(&self) -> bool {
+        self.choked
+    }
+
+    /// Check if peer has a piece.
+    ///
+    /// # Arguments
+    ///
+    /// * `index` - The piece index to check.
+    ///
+    pub fn has_piece(&self, index: u32) -> bool {
+        let byte_index = index / 8;
+        let offset = index % 8;
+
+        // Prevent unbounded values
+        if byte_index < self.bitfield.len() as u32 {
+            // Check for piece index into bitfield
+            return self.bitfield[byte_index as usize] >> (7 - offset) as u8 & 1 != 0;
+        }
+        false
+    }
+
+    /// Set a piece that peer has.
+    ///
+    /// # Arguments
+    ///
+    /// * `index` - The piece index to update into bitfield.
+    ///
+    pub fn set_piece(&mut self, index: u32) {
+        let byte_index = index / 8;
+        let offset = index % 8;
+
+        // Create a new bitfield
+        let mut bitfield: Vec<u8> = self.bitfield.to_vec();
+
+        // Prevent unbounded values
+        if byte_index < self.bitfield.len() as u32 {
+            // Set piece index into bitfield
+            bitfield[byte_index as usize] |= (1 << (7 - offset)) as u8;
+            self.bitfield = bitfield;
+        }
     }
 
     /// Set connection timeout.
     ///
     /// # Arguments
     ///
-    /// * `seconds` - The timeout in seconds.
+    /// * `secs` - The timeout in seconds.
     ///
-    pub fn set_connection_timeout(&self, seconds: u64) -> Result<()> {
+    pub fn set_connection_timeout(&self, secs: u64) -> Result<()> {
         // Set write timeout
         if self
             .conn
-            .set_write_timeout(Some(Duration::from_secs(seconds)))
+            .set_write_timeout(Some(Duration::from_secs(secs)))
             .is_err()
         {
             return Err(anyhow!("could not set write timeout"));
@@ -90,7 +141,7 @@ impl Client {
         // Set read timeout
         if self
             .conn
-            .set_read_timeout(Some(Duration::from_secs(seconds)))
+            .set_read_timeout(Some(Duration::from_secs(secs)))
             .is_err()
         {
             return Err(anyhow!("could not set read timeout"));
@@ -107,7 +158,7 @@ impl Client {
         // Create handshake
         let peer_id = self.peer_id.clone();
         let info_hash = self.info_hash.clone();
-        let handshake = Handshake::new(peer_id, info_hash)?;
+        let handshake = Handshake::new(peer_id, info_hash);
 
         // Send handshake to remote peer
         let handshake_encoded: Vec<u8> = handshake.serialize()?;
@@ -116,23 +167,23 @@ impl Client {
         }
 
         // Read handshake received from remote peer
-        let handshake_len: u8 = self.read_handshake_len()?;
-        let mut handshake_buf: Vec<u8> = vec![0; 48 + handshake_len as usize];
+        let handshake_len: usize = self.read_handshake_len()?;
+        let mut handshake_buf: Vec<u8> = vec![0; 48 + handshake_len];
         if self.conn.read_exact(&mut handshake_buf).is_err() {
-            return Err(anyhow!("could not parse handshake received from peer"));
+            return Err(anyhow!("could not read handshake received from peer"));
         }
 
         // Check info hash received from remote peer
         let handshake_decoded: Handshake = deserialize_handshake(&handshake_buf, handshake_len)?;
         if handshake_decoded.get_info_hash() != self.info_hash {
-            return Err(anyhow!("invalid handshake message received from peer"));
+            return Err(anyhow!("invalid handshake received from peer"));
         }
 
         Ok(())
     }
 
     /// Read handshake length
-    fn read_handshake_len(&mut self) -> Result<u8> {
+    fn read_handshake_len(&mut self) -> Result<usize> {
         // Read 1 byte into buffer
         let mut buf = [0; 1];
         if self.conn.read_exact(&mut buf).is_err() {
@@ -142,29 +193,40 @@ impl Client {
         }
 
         // Get handshake length
-        let len = buf[0];
-        if len == 0 {
+        let handshake_len = buf[0];
+        if handshake_len == 0 {
             return Err(anyhow!("invalid handshake length received from peer"));
         }
 
-        Ok(len)
+        Ok(handshake_len as usize)
     }
 
     /// Read message from remote peer.
-    fn read_message(&mut self) -> Result<Message> {
-        let message_len: u32 = self.read_message_len()?;
-        let mut message_buf: Vec<u8> = vec![0; 4 + message_len as usize];
-        if self.conn.read_exact(&mut message_buf).is_err() {
-            return Err(anyhow!("could not parse message received from peer"));
+    pub fn read_message(&mut self) -> Result<Message> {
+        // Set connection timeout
+        self.set_connection_timeout(3)?;
+
+        let message_len: usize = self.read_message_len()?;
+
+        // If message length is 0, it's a keep-alive
+        if message_len == 0 {
+            println!("Receive KEEP_ALIVE from peer {:?}", self.peer.get_id());
         }
 
+        // Read message
+        let mut message_buf: Vec<u8> = vec![0; message_len as usize];
+        if self.conn.read_exact(&mut message_buf).is_err() {
+            return Err(anyhow!("could not read message received from peer"));
+        }
+
+        // Deserialize message
         let message: Message = deserialize_message(&message_buf, message_len)?;
 
         Ok(message)
     }
 
     /// Read message length.
-    fn read_message_len(&mut self) -> Result<u32> {
+    fn read_message_len(&mut self) -> Result<usize> {
         // Read bytes into buffer
         let mut buf = [0; 4];
         if self.conn.read_exact(&mut buf).is_err() {
@@ -172,36 +234,19 @@ impl Client {
         }
 
         // Get message length
-        let mut buf_cursor = Cursor::new(buf);
-        let len = buf_cursor.read_u32::<BigEndian>()?;
+        let mut cursor = Cursor::new(buf);
+        let message_len = cursor.read_u32::<BigEndian>()?;
 
-        // If message length is 0, it's a keep-alive
-        if len == 0 {
-            println!("Received keep-alive message");
-        }
-
-        Ok(len)
-    }
-
-    /// Read BITFIELD message from remote peer.
-    pub fn read_bitfield(&mut self) -> Result<Message> {
-        println!("Read bitfield from {:?}:{:?}", self.peer.ip, self.peer.port);
-        let message: Message = self.read_message()?;
-        if message.get_id() != MESSAGE_BITFIELD {
-            return Err(anyhow!("could not read MESSAGE_BITFIELD from peer"));
-        }
-
-        Ok(message)
+        Ok(message_len as usize)
     }
 
     /// Send CHOKE message to remote peer.
     pub fn send_choke(&mut self) -> Result<()> {
-        let message: Message = Message::new(MESSAGE_CHOKE)?;
+        let message: Message = Message::new(MESSAGE_CHOKE);
         let message_encoded = message.serialize()?;
-        println!(
-            "Send MESSAGE_CHOKE to {:?}:{:?}",
-            self.peer.ip, self.peer.port
-        );
+
+        println!("Send MESSAGE_CHOKE to peer {:?}", self.peer.get_id());
+
         if self.conn.write(&message_encoded).is_err() {
             return Err(anyhow!("could not send MESSAGE_CHOKE to peer"));
         }
@@ -209,14 +254,19 @@ impl Client {
         Ok(())
     }
 
+    // Read CHOKE message from remote peer.
+    pub fn read_choke(&mut self) {
+        println!("Receive MESSAGE_CHOKE from peer {:?}", self.peer.get_id());
+        self.choked = true
+    }
+
     /// Send UNCHOKE message to remote peer.
     pub fn send_unchoke(&mut self) -> Result<()> {
-        let message: Message = Message::new(MESSAGE_UNCHOKE)?;
+        let message: Message = Message::new(MESSAGE_UNCHOKE);
         let message_encoded = message.serialize()?;
-        println!(
-            "Send MESSAGE_UNCHOKE to {:?}:{:?}",
-            self.peer.ip, self.peer.port
-        );
+
+        println!("Send MESSAGE_UNCHOKE to peer {:?}", self.peer.get_id());
+
         if self.conn.write(&message_encoded).is_err() {
             return Err(anyhow!("could not send MESSAGE_UNCHOKE to peer"));
         }
@@ -224,14 +274,19 @@ impl Client {
         Ok(())
     }
 
+    // Read UNCHOKE message from remote peer.
+    pub fn read_unchoke(&mut self) {
+        println!("Receive MESSAGE_UNCHOKE from peer {:?}", self.peer.get_id());
+        self.choked = false
+    }
+
     /// Send INTERESTED message to remote peer.
     pub fn send_interested(&mut self) -> Result<()> {
-        let message: Message = Message::new(MESSAGE_INTERESTED)?;
+        let message: Message = Message::new(MESSAGE_INTERESTED);
         let message_encoded = message.serialize()?;
-        println!(
-            "Send MESSAGE_INTERESTED to {:?}:{:?}",
-            self.peer.ip, self.peer.port
-        );
+
+        println!("Send MESSAGE_INTERESTED to peer {:?}", self.peer.get_id());
+
         if self.conn.write(&message_encoded).is_err() {
             return Err(anyhow!("could not send MESSAGE_INTERESTED to peer"));
         }
@@ -241,12 +296,14 @@ impl Client {
 
     /// Send NOT INTERESTED message to remote peer.
     pub fn send_not_interested(&mut self) -> Result<()> {
-        let message: Message = Message::new(MESSAGE_NOT_INTERESTED)?;
+        let message: Message = Message::new(MESSAGE_NOT_INTERESTED);
         let message_encoded = message.serialize()?;
+
         println!(
-            "Send MESSAGE_NOT_INTERESTED to {:?}:{:?}",
-            self.peer.ip, self.peer.port
+            "Send MESSAGE_NOT_INTERESTED to peer {:?}",
+            self.peer.get_id()
         );
+
         if self.conn.write(&message_encoded).is_err() {
             return Err(anyhow!("could not send MESSAGE_NOT_INTERESTED to peer"));
         }
@@ -256,12 +313,11 @@ impl Client {
 
     /// Send HAVE message to remote peer.
     pub fn send_have(&mut self) -> Result<()> {
-        let message: Message = Message::new(MESSAGE_HAVE)?;
+        let message: Message = Message::new(MESSAGE_HAVE);
         let message_encoded = message.serialize()?;
-        println!(
-            "Send MESSAGE_HAVE to {:?}:{:?}",
-            self.peer.ip, self.peer.port
-        );
+
+        println!("Send MESSAGE_HAVE to peer {:?}", self.peer.get_id());
+
         if self.conn.write(&message_encoded).is_err() {
             return Err(anyhow!("could not send MESSAGE_HAVE to peer"));
         }
@@ -269,14 +325,41 @@ impl Client {
         Ok(())
     }
 
+    /// Read HAVE message from remote peer.
+    ///
+    /// The message payload is the zero-based index of a piece that has just been successfully downloaded and verified via the hash.
+    ///
+    /// # Arguments
+    ///
+    /// * `message` - The message to parse.
+    ///
+    pub fn read_have(&mut self, message: Message) -> Result<()> {
+        println!("Receive MESSAGE_HAVE from peer {:?}", self.peer.get_id());
+
+        // Check if message id and payload are valid
+        if message.get_id() != MESSAGE_HAVE || message.get_payload().len() != 4 {
+            return Err(anyhow!("received invalid MESSAGE_HAVE from peer"));
+        }
+
+        // Get piece index
+        let mut payload_cursor = Cursor::new(message.get_payload());
+        let piece_index = payload_cursor.read_u32::<BigEndian>()?;
+
+        println!("Peer {:?} has piece {:?}", self.peer.get_id(), piece_index);
+
+        // Update bitfield
+        self.set_piece(piece_index);
+
+        Ok(())
+    }
+
     /// Send BITFIELD message to remote peer.
     pub fn send_bitfield(&mut self) -> Result<()> {
-        let message: Message = Message::new(MESSAGE_BITFIELD)?;
+        let message: Message = Message::new(MESSAGE_BITFIELD);
         let message_encoded = message.serialize()?;
-        println!(
-            "Send MESSAGE_BITFIELD Tto {:?}:{:?}",
-            self.peer.ip, self.peer.port
-        );
+
+        println!("Send MESSAGE_BITFIELD to peer {:?}", self.peer.get_id());
+
         if self.conn.write(&message_encoded).is_err() {
             return Err(anyhow!("could not send MESSAGE_BITFIELD to peer"));
         }
@@ -284,14 +367,44 @@ impl Client {
         Ok(())
     }
 
-    /// Send REQUEST message to remote peer.
-    pub fn send_request(&mut self) -> Result<()> {
-        let message: Message = Message::new(MESSAGE_REQUEST)?;
-        let message_encoded = message.serialize()?;
+    /// Read BITFIELD message from remote peer.
+    ///
+    /// The message payload is a bitfield representing the pieces that have been successfully downloaded.
+    /// The high bit in the first byte corresponds to piece index 0.
+    /// Bits that are cleared indicated a missing piece, and set bits indicate a valid and available piece.
+    /// Spare bits at the end are set to zero.
+    ///
+    pub fn read_bitfield(&mut self) -> Result<()> {
         println!(
-            "Send MESSAGE_REQUEST to {:?}:{:?}",
-            self.peer.ip, self.peer.port
+            "Receive MESSAGE_BITFIELD from peer {:?}",
+            self.peer.get_id()
         );
+
+        let message: Message = self.read_message()?;
+        if message.get_id() != MESSAGE_BITFIELD {
+            return Err(anyhow!("received invalid MESSAGE_BITFIELD from peer"));
+        }
+
+        // Update bitfield
+        self.bitfield = message.get_payload();
+
+        Ok(())
+    }
+
+    /// Send REQUEST message to remote peer.
+    ///
+    /// The request message is fixed length, and is used to request a block.
+    /// The payload contains the following information:
+    /// - index: integer specifying the zero-based piece index
+    /// - begin: integer specifying the zero-based byte offset within the piece
+    /// - length: integer specifying the requested length.
+    ///
+    pub fn send_request(&mut self, index: u32, begin: u32, length: u32) -> Result<()> {
+        let message: Message = Message::new(MESSAGE_REQUEST);
+        let message_encoded = message.serialize()?;
+
+        println!("Send MESSAGE_REQUEST to peer {:?}", self.peer.get_id());
+
         if self.conn.write(&message_encoded).is_err() {
             return Err(anyhow!("could not send MESSAGE_REQUEST to peer"));
         }
@@ -301,12 +414,11 @@ impl Client {
 
     /// Send PIECE message to remote peer.
     pub fn send_piece(&mut self) -> Result<()> {
-        let message: Message = Message::new(MESSAGE_PIECE)?;
+        let message: Message = Message::new(MESSAGE_PIECE);
         let message_encoded = message.serialize()?;
-        println!(
-            "Send MESSAGE_PIECE to {:?}:{:?}",
-            self.peer.ip, self.peer.port
-        );
+
+        println!("Send MESSAGE_PIECE to {:?}", self.peer.get_id());
+
         if self.conn.write(&message_encoded).is_err() {
             return Err(anyhow!("could not send MESSAGE_PIECE to peer"));
         }
@@ -314,14 +426,40 @@ impl Client {
         Ok(())
     }
 
+    /// Read PIECE message from remote peer.
+    ///
+    /// The message payload contains the following information:
+    /// - index: integer specifying the zero-based piece index
+    /// - begin: integer specifying the zero-based byte offset within the piece
+    /// - block: block of data, which is a subset of the piece specified by index.
+    ///
+    /// # Arguments
+    ///
+    /// * `message` - The message to parse.
+    /// * `piece_work` - A work piece.
+    ///
+    pub fn read_piece(&mut self, message: Message, piece_work: &mut PieceWork) -> Result<()> {
+        println!("Read MESSAGE_PIECE from {:?}", self.peer.get_id());
+
+        // Check if message id and payload are valid
+        if message.get_id() != MESSAGE_PIECE || message.get_payload().len() > 8 {
+            return Err(anyhow!("received invalid MESSAGE_HAVE from peer"));
+        }
+
+        // Get piece index
+        let mut payload_cursor = Cursor::new(message.get_payload());
+        let piece_index = payload_cursor.read_u32::<BigEndian>()?;
+
+        Ok(())
+    }
+
     /// Send CANCEL message to remote peer.
     pub fn send_cancel(&mut self) -> Result<()> {
-        let message: Message = Message::new(MESSAGE_CANCEL)?;
+        let message: Message = Message::new(MESSAGE_CANCEL);
         let message_encoded = message.serialize()?;
-        println!(
-            "Send MESSAGE_CANCEL to {:?}:{:?}",
-            self.peer.ip, self.peer.port
-        );
+
+        println!("Send MESSAGE_CANCEL to {:?}", self.peer.get_id());
+
         if self.conn.write(&message_encoded).is_err() {
             return Err(anyhow!("could not send MESSAGE_CANCEL to peer"));
         }
@@ -331,12 +469,11 @@ impl Client {
 
     /// Send PORT message to remote peer.
     pub fn send_port(&mut self) -> Result<()> {
-        let message: Message = Message::new(MESSAGE_PORT)?;
+        let message: Message = Message::new(MESSAGE_PORT);
         let message_encoded = message.serialize()?;
-        println!(
-            "Send MESSAGE_PORT to {:?}:{:?}",
-            self.peer.ip, self.peer.port
-        );
+
+        println!("Send MESSAGE_PORT to {:?}", self.peer.get_id());
+
         if self.conn.write(&message_encoded).is_err() {
             return Err(anyhow!("could not send MESSAGE_PORT to peer"));
         }

@@ -26,8 +26,11 @@ extern crate serde_bencode;
 extern crate url;
 
 use crate::peer::*;
+use crate::piece::*;
+use crate::worker::*;
 
 use anyhow::{anyhow, Result};
+use crossbeam_channel::{unbounded, Receiver, Sender};
 use crypto::digest::Digest;
 use crypto::sha1::Sha1;
 use rand::Rng;
@@ -41,6 +44,7 @@ use std::borrow::Cow;
 use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
+use std::thread;
 use std::time::Duration;
 
 const PORT: u16 = 6881;
@@ -50,21 +54,21 @@ const SHA1_HASH_SIZE: usize = 20;
 #[derive(Default, Clone)]
 pub struct Torrent {
     // URL of the tracker
-    pub announce: String,
+    announce: String,
     // 20-byte SHA-1 hash calculated over the content of the bencoded info dictionary
-    pub info_hash: Vec<u8>,
+    info_hash: Vec<u8>,
     // SHA-1 hashes of each pieces
-    pub pieces_hashes: Vec<Vec<u8>>,
+    pieces_hashes: Vec<Vec<u8>>,
     // Size of each piece in bytes
-    pub piece_length: u32,
+    piece_length: u32,
     // Size of the file in bytes
-    pub length: u32,
+    length: u32,
     // Suggested filename where to save the file
-    pub name: String,
+    name: String,
     // Urlencoded 20-byte string used as unique client ID
-    pub peer_id: Vec<u8>,
+    peer_id: Vec<u8>,
     // Peers
-    pub peers: Vec<Peer>,
+    peers: Vec<Peer>,
 }
 
 /// BencodeInfo structure.
@@ -158,7 +162,7 @@ impl Torrent {
         };
 
         // Read torrent content in a buffer
-        let mut buf = Vec::new();
+        let mut buf = vec![];
         if file.read_to_end(&mut buf).is_err() {
             return Err(anyhow!("could not read torrent"));
         }
@@ -277,5 +281,59 @@ impl Torrent {
             .append_pair("left", &self.length.to_string());
 
         Ok(base_url.to_string())
+    }
+
+    /// Download torrent.
+    ///
+    /// # Arguments
+    ///
+    /// * `filepath` - Path where to save the file.
+    ///
+    pub fn download(&self, filepath: PathBuf) -> Result<()> {
+        let peers = self.peers.to_owned();
+
+        // Create work pieces channel
+        let work_chan: (Sender<PieceWork>, Receiver<PieceWork>) = unbounded();
+
+        // Create result pieces channel
+        let result_chan: (Sender<PieceResult>, Receiver<PieceResult>) = unbounded();
+
+        // Create and send pieces to work channel
+        for index in 0..self.pieces_hashes.len() {
+            // Create piece
+            let piece_index = index as u32;
+            let piece_hash = self.pieces_hashes[index].clone();
+            let piece_length = self.piece_length;
+            let piece_work = PieceWork::new(piece_index, piece_hash, piece_length)?;
+            // Send piece to work channel
+            work_chan.0.send(piece_work)?;
+        }
+
+        // Init workers
+        for peer in peers {
+            let peer_copy = peer.clone();
+            let peer_id_copy = self.peer_id.clone();
+            let info_hash_copy = self.info_hash.clone();
+            let work_chan_copy = work_chan.clone();
+            let result_chan_copy = result_chan.clone();
+
+            // Create new worker
+            let worker = Worker::new(
+                peer_copy,
+                peer_id_copy,
+                info_hash_copy,
+                work_chan_copy,
+                result_chan_copy,
+            )?;
+
+            // Start worker in a new thread
+            thread::spawn(move || {
+                worker.start();
+            });
+        }
+
+        while 1 == 1 {}
+
+        Ok(())
     }
 }

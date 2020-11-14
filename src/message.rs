@@ -19,7 +19,7 @@
 // SOFTWARE.
 
 use anyhow::Result;
-use byteorder::{BigEndian, ByteOrder};
+use byteorder::{BigEndian, WriteBytesExt};
 
 type MessageId = u8;
 type MessagePayload = Vec<u8>;
@@ -35,7 +35,7 @@ pub const MESSAGE_PIECE: MessageId = 7;
 pub const MESSAGE_CANCEL: MessageId = 8;
 pub const MESSAGE_PORT: MessageId = 9;
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Message {
     // Message type
     id: MessageId,
@@ -50,13 +50,11 @@ impl Message {
     ///
     /// * `id` - The type of the message.
     ///
-    pub fn new(id: MessageId) -> Result<Message> {
-        let payload: MessagePayload = vec![];
-
-        // Build message
-        let message = Message { id, payload };
-
-        Ok(message)
+    pub fn new(id: MessageId) -> Self {
+        Message {
+            id,
+            payload: vec![],
+        }
     }
 
     /// Build a new message with a payload.
@@ -66,11 +64,8 @@ impl Message {
     /// * `id` - The type of the message.
     /// * `payload` - The content of the message.
     ///
-    pub fn new_with_payload(id: MessageId, payload: MessagePayload) -> Result<Message> {
-        // Build message
-        let message = Message { id, payload };
-
-        Ok(message)
+    pub fn new_with_payload(id: MessageId, payload: MessagePayload) -> Self {
+        Message { id, payload }
     }
 
     /// Get message id.
@@ -85,18 +80,21 @@ impl Message {
 
     /// Serialize message.
     pub fn serialize(&self) -> Result<Vec<u8>> {
+        // Get message length
         let message_len = 1 + self.payload.len();
+
+        // Create a new buffer
         let mut serialized: Vec<u8> = vec![0; 4 + message_len];
 
-        // Add length
-        let mut buf = [0; 4];
-        BigEndian::write_u32(&mut buf, message_len as u32);
-        serialized.append(&mut buf.to_vec());
+        // Add message length
+        let mut len: Vec<u8> = vec![];
+        len.write_u32::<BigEndian>(message_len as u32)?;
+        serialized.append(&mut len);
 
-        // Add id
+        // Add message id
         serialized.push(self.id);
 
-        // Add payload
+        // Add message payload
         let mut payload = self.payload.clone();
         serialized.append(&mut payload);
 
@@ -105,20 +103,26 @@ impl Message {
 }
 
 /// Deserialize message.
-pub fn deserialize_message(buf_message: &Vec<u8>, len: u32) -> Result<Message> {
-    // Get id
-    let id: MessageId = buf_message[0];
+///
+/// # Arguments
+///
+/// * `message_buf` - The message to deserialize.
+/// * `message_len` - The message length.
+///
+pub fn deserialize_message(message_buf: &Vec<u8>, message_len: usize) -> Result<Message> {
+    // Get message id
+    let id: MessageId = message_buf[0];
 
-    // Get payload
-    let mut payload: MessagePayload = Vec::new();
-    for (i, x) in buf_message.iter().enumerate() {
-        if i > 0 && i < (len as usize) {
+    // Get message payload
+    let mut payload: MessagePayload = vec![];
+    for (i, x) in message_buf.iter().enumerate() {
+        if i > 0 && i < message_len {
             payload.push(x.to_owned());
         }
     }
 
     // Build message
-    let message = Message::new_with_payload(id, payload)?;
+    let message = Message::new_with_payload(id, payload);
 
     Ok(message)
 }

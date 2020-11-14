@@ -25,76 +25,56 @@ extern crate serde;
 extern crate serde_bencode;
 extern crate url;
 
-use crate::bitfield::*;
 use crate::client::*;
+use crate::message::*;
 use crate::peer::*;
 use crate::piece::*;
-use crate::torrent::*;
 
-use anyhow::{anyhow, Result};
-use crossbeam_channel::{unbounded, Receiver, Sender};
+use anyhow::Result;
+use crossbeam_channel::{Receiver, Sender};
 
-use std::path::PathBuf;
 use std::thread;
 use std::time::Duration;
 
-impl Torrent {
-    /// Download torrent.
+pub struct Worker {
+    peer: Peer,
+    peer_id: Vec<u8>,
+    info_hash: Vec<u8>,
+    work_chan: (Sender<PieceWork>, Receiver<PieceWork>),
+    result_chan: (Sender<PieceResult>, Receiver<PieceResult>),
+}
+
+impl Worker {
+    /// Build a new worker.
     ///
     /// # Arguments
     ///
-    /// * `filepath` - Path where to save the file.
-    ///
-    pub fn download(&self, filepath: PathBuf) -> Result<()> {
-        let peers = self.peers.to_owned();
-
-        // Create a work channel channel of unbounded capacity
-        let work_chan: (Sender<PieceWork>, Receiver<PieceWork>) = unbounded();
-
-        // Create a result channel of unbounded capacity
-        let result_chan: (Sender<PieceResult>, Receiver<PieceResult>) = unbounded();
-
-        // Init workers
-        for index in 0..self.pieces_hashes.len() {
-            // Create work piece
-            let hash = self.pieces_hashes[index].clone();
-            let length = self.piece_length;
-            let piece_work = PieceWork::new(index, hash, length);
-
-            // Send piece to work channel
-            work_chan.0.send(piece_work)?;
-        }
-
-        // Start workers
-        for peer in peers {
-            let self_copy = self.clone();
-            let work_chan_copy = work_chan.clone();
-            let result_chan_copy = result_chan.clone();
-            thread::spawn(move || {
-                self_copy.start_worker(peer, work_chan_copy, result_chan_copy);
-            });
-        }
-
-        while 1 == 1 {}
-
-        Ok(())
-    }
-
-    /// Start worker.
-    ///
-    /// # Arguments
-    ///
-    /// * `peer` - The remote peer.
+    /// * `peer` - A remote peer to connect to.
     /// * `work_chan` - The channel to send and receive work pieces.
     /// * `result_chan` - The channel to send result pieces.
     ///
-    fn start_worker(
-        &self,
+    pub fn new(
         peer: Peer,
+        peer_id: Vec<u8>,
+        info_hash: Vec<u8>,
         work_chan: (Sender<PieceWork>, Receiver<PieceWork>),
         result_chan: (Sender<PieceResult>, Receiver<PieceResult>),
-    ) {
-        let peer_copy = peer.clone();
+    ) -> Result<Worker> {
+        // Create a new worker
+        let worker = Worker {
+            peer,
+            peer_id,
+            info_hash,
+            work_chan,
+            result_chan,
+        };
+
+        Ok(worker)
+    }
+
+    /// Start worker.
+    pub fn start(&self) {
+        let peer_copy = self.peer.clone();
         let peer_id_copy = self.peer_id.clone();
         let info_hash_copy = self.info_hash.clone();
 
@@ -110,10 +90,9 @@ impl Torrent {
         }
 
         // Read bitfield from peer
-        let mut bitfield: Bitfield = match client.read_bitfield() {
-            Ok(msg) => msg.get_payload(),
-            Err(_) => return,
-        };
+        if client.read_bitfield().is_err() {
+            return;
+        }
 
         // Send unchoke
         if client.send_unchoke().is_err() {
@@ -125,51 +104,69 @@ impl Torrent {
             return;
         }
 
-        println!("Connected to peer {:?}:{:?}", &peer.ip, &peer.port);
+        println!("Connected to peer {:?}", self.peer.get_id());
 
         loop {
             // Receive a piece from work channel
-            let piece_work: PieceWork = match work_chan.1.recv() {
+            let mut piece_work: PieceWork = match self.work_chan.1.recv() {
                 Ok(piece_work) => piece_work,
                 Err(_) => return,
             };
 
-            // Check if peer has piece
-            if !has_piece(&mut bitfield, piece_work.get_index()) {
+            // Check if remote peer has piece
+            if !client.has_piece(piece_work.get_index()) {
                 // Resend piece to work channel
-                if work_chan.0.send(piece_work).is_err() {
+                if self.work_chan.0.send(piece_work).is_err() {
                     println!("Error: could not send work piece to channel")
                 }
                 return;
             }
 
-            println!("Downloading piece {:?}", piece_work.get_index());
+            println!(
+                "Downloading piece {:?} from peer {:?}",
+                piece_work.get_index(),
+                self.peer.get_id()
+            );
 
             // Download piece
-            let buf = match client.download_piece(piece_work) {
-                Ok(buf) => buf,
-                Err(_) => return,
-            };
+            if self.download_piece(&mut client, &mut piece_work).is_err() {
+                return;
+            }
         }
     }
-}
 
-impl Client {
-    /// Download a piece.
+    /// Download a torrent piece.
     ///
     /// # Arguments
     ///
-    /// * `piece_work` - A work piece.
+    /// * `client` - A client connected to a remote peer.
+    /// * `piece_work` - A piece to download.
     ///
-    fn download_piece(&self, piece_work: PieceWork) -> Result<Vec<u8>> {
-        // Set connection timeout
-        self.set_connection_timeout(30)?;
+    fn download_piece(&self, client: &mut Client, piece_work: &mut PieceWork) -> Result<()> {
+        // Set client connection timeout
+        client.set_connection_timeout(30)?;
 
         // Download torrent piece
         while piece_work.get_downloaded() < piece_work.get_length() {
-            thread::sleep(Duration::from_secs(1));
-        }
+            // If client is unchoked by peer, send requests for pieces
+            if !client.is_choked() {
+                // Send request for a block
+                client.send_request(0, 0, 0)?;
+                thread::sleep(Duration::from_secs(1));
+            }
 
-        Ok(piece_work.get_buf())
+            // Listen peer
+            let message: Message = client.read_message()?;
+
+            // Parse message
+            match message.get_id() {
+                MESSAGE_CHOKE => client.read_choke(),
+                MESSAGE_UNCHOKE => client.read_unchoke(),
+                MESSAGE_HAVE => client.read_have(message)?,
+                MESSAGE_PIECE => client.read_piece(message, piece_work)?,
+                _ => println!("received unknown message from peer"),
+            }
+        }
+        Ok(())
     }
 }
