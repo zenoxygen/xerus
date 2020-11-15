@@ -87,6 +87,11 @@ impl Worker {
             Err(_) => return,
         };
 
+        // Set connection timeout
+        if client.set_connection_timeout(5).is_err() {
+            return;
+        }
+
         // Handshake with peer
         if client.handshake_with_peer().is_err() {
             return;
@@ -148,9 +153,8 @@ impl Worker {
                 while piece_work.get_requests() < NB_REQUESTS_MAX
                     && piece_work.get_requested() < piece_work.get_length()
                 {
+                    // Get block size to request
                     let mut block_size = BLOCK_SIZE_MAX;
-
-                    // Get the remaining length of data to request
                     let remaining = piece_work.get_length() - piece_work.get_requested();
                     if remaining < BLOCK_SIZE_MAX {
                         block_size = remaining;

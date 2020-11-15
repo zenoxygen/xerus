@@ -154,9 +154,6 @@ impl Client {
 
     /// Handshake with remote peer.
     pub fn handshake_with_peer(&mut self) -> Result<()> {
-        // Set connection timeout
-        self.set_connection_timeout(3)?;
-
         // Create handshake
         let peer_id = self.peer_id.clone();
         let info_hash = self.info_hash.clone();
@@ -205,9 +202,6 @@ impl Client {
 
     /// Read message from remote peer.
     pub fn read_message(&mut self) -> Result<Message> {
-        // Set connection timeout
-        self.set_connection_timeout(3)?;
-
         let message_len: usize = self.read_message_len()?;
 
         // If message length is 0, it's a keep-alive
@@ -346,8 +340,6 @@ impl Client {
         // Get piece index
         let mut payload_cursor = Cursor::new(message.get_payload());
         let index = payload_cursor.read_u32::<BigEndian>()?;
-
-        println!("Peer {:?} has piece {:?}", self.peer.get_id(), index);
 
         // Update bitfield
         self.set_piece(index);
