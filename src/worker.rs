@@ -36,6 +36,9 @@ use crossbeam_channel::{Receiver, Sender};
 use std::thread;
 use std::time::Duration;
 
+// Block size limit (2^14) in bytes
+const BLOCK_SIZE_LIMIT: u32 = 16384;
+
 pub struct Worker {
     peer: Peer,
     peer_id: Vec<u8>,
@@ -104,8 +107,6 @@ impl Worker {
             return;
         }
 
-        println!("Connected to peer {:?}", self.peer.get_id());
-
         loop {
             // Receive a piece from work channel
             let mut piece_work: PieceWork = match self.work_chan.1.recv() {
@@ -121,12 +122,6 @@ impl Worker {
                 }
                 return;
             }
-
-            println!(
-                "Downloading piece {:?} from peer {:?}",
-                piece_work.get_index(),
-                self.peer.get_id()
-            );
 
             // Download piece
             if self.download_piece(&mut client, &mut piece_work).is_err() {
@@ -150,9 +145,16 @@ impl Worker {
         while piece_work.get_downloaded() < piece_work.get_length() {
             // If client is unchoked by peer, send requests for pieces
             if !client.is_choked() {
-                // Send request for a block
-                client.send_request(0, 0, 0)?;
-                thread::sleep(Duration::from_secs(1));
+                while piece_work.get_requested() < piece_work.get_length() {
+                    // Send request for a block
+                    client.send_request(
+                        piece_work.get_index(),
+                        piece_work.get_requested(),
+                        BLOCK_SIZE_LIMIT,
+                    )?;
+                    // Update requested counter
+                    piece_work.set_requested(piece_work.get_requested() + BLOCK_SIZE_LIMIT);
+                }
             }
 
             // Listen peer

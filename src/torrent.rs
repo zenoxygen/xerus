@@ -305,6 +305,7 @@ impl Torrent {
             let piece_hash = self.pieces_hashes[index].clone();
             let piece_length = self.piece_length;
             let piece_work = PieceWork::new(piece_index, piece_hash, piece_length)?;
+
             // Send piece to work channel
             work_chan.0.send(piece_work)?;
         }

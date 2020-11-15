@@ -29,9 +29,11 @@ pub struct PieceWork {
     hash: Vec<u8>,
     // Piece length
     length: u32,
-    // Piece buf
-    buf: Vec<u8>,
-    // Downloaded counter
+    // Piece data
+    data: Vec<u8>,
+    // Requested counter in bytes
+    requested: u32,
+    // Downloaded counter in bytes
     downloaded: u32,
 }
 
@@ -40,8 +42,8 @@ pub struct PieceWork {
 pub struct PieceResult {
     // Piece index
     index: u32,
-    // Piece buf
-    buf: Vec<u8>,
+    // Piece data
+    data: Vec<u8>,
 }
 
 impl PieceWork {
@@ -58,7 +60,8 @@ impl PieceWork {
             index,
             hash,
             length,
-            buf: vec![0; length as usize],
+            data: vec![0; length as usize],
+            requested: 0,
             downloaded: 0,
         };
 
@@ -70,18 +73,33 @@ impl PieceWork {
         self.index
     }
 
-    /// Get work piece buf.
-    pub fn get_buf(&self) -> Vec<u8> {
-        self.buf.to_vec()
-    }
-
     /// Get work piece length.
     pub fn get_length(&self) -> u32 {
         self.length
     }
 
+    /// Get work piece data.
+    pub fn get_data(&self) -> Vec<u8> {
+        self.data.to_vec()
+    }
+
+    /// Get work piece requested counter.
+    pub fn get_requested(&self) -> u32 {
+        self.requested
+    }
+
+    /// Set work piece requested counter.
+    pub fn set_requested(&mut self, requested: u32) {
+        self.requested = requested
+    }
+
     /// Get work piece downloaded counter.
     pub fn get_downloaded(&self) -> u32 {
         self.downloaded
+    }
+
+    /// Set work piece downloaded counter.
+    pub fn set_downloaded(&mut self, downloaded: u32) {
+        self.downloaded = downloaded
     }
 }

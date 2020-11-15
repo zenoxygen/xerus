@@ -27,7 +27,7 @@ use crate::peer::*;
 use crate::piece::*;
 
 use anyhow::{anyhow, Result};
-use byteorder::{BigEndian, ReadBytesExt};
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 
 use std::io::{Cursor, Read, Write};
 use std::net::{IpAddr, SocketAddr, TcpStream};
@@ -64,6 +64,8 @@ impl Client {
             Ok(conn) => conn,
             Err(_) => return Err(anyhow!("could not connect to peer")),
         };
+
+        println!("Connected to peer {:?}", peer.get_id());
 
         // Return new client
         let client = Client {
@@ -343,12 +345,12 @@ impl Client {
 
         // Get piece index
         let mut payload_cursor = Cursor::new(message.get_payload());
-        let piece_index = payload_cursor.read_u32::<BigEndian>()?;
+        let index = payload_cursor.read_u32::<BigEndian>()?;
 
-        println!("Peer {:?} has piece {:?}", self.peer.get_id(), piece_index);
+        println!("Peer {:?} has piece {:?}", self.peer.get_id(), index);
 
         // Update bitfield
-        self.set_piece(piece_index);
+        self.set_piece(index);
 
         Ok(())
     }
@@ -400,10 +402,21 @@ impl Client {
     /// - length: integer specifying the requested length.
     ///
     pub fn send_request(&mut self, index: u32, begin: u32, length: u32) -> Result<()> {
-        let message: Message = Message::new(MESSAGE_REQUEST);
+        let mut payload: Vec<u8> = vec![];
+        payload.write_u32::<BigEndian>(index)?;
+        payload.write_u32::<BigEndian>(begin)?;
+        payload.write_u32::<BigEndian>(length)?;
+
+        let message: Message = Message::new_with_payload(MESSAGE_REQUEST, payload);
         let message_encoded = message.serialize()?;
 
-        println!("Send MESSAGE_REQUEST to peer {:?}", self.peer.get_id());
+        println!(
+            "Send MESSAGE_REQUEST for piece {:?} [{:?}:{:?}] to peer {:?}",
+            index,
+            begin,
+            begin + length,
+            self.peer.get_id()
+        );
 
         if self.conn.write(&message_encoded).is_err() {
             return Err(anyhow!("could not send MESSAGE_REQUEST to peer"));
@@ -439,16 +452,45 @@ impl Client {
     /// * `piece_work` - A work piece.
     ///
     pub fn read_piece(&mut self, message: Message, piece_work: &mut PieceWork) -> Result<()> {
-        println!("Read MESSAGE_PIECE from {:?}", self.peer.get_id());
+        println!("Receive MESSAGE_PIECE from {:?}", self.peer.get_id());
 
         // Check if message id and payload are valid
-        if message.get_id() != MESSAGE_PIECE || message.get_payload().len() > 8 {
+        if message.get_id() != MESSAGE_PIECE || message.get_payload().len() < 8 {
             return Err(anyhow!("received invalid MESSAGE_HAVE from peer"));
         }
 
+        let payload: Vec<u8> = message.get_payload();
+
         // Get piece index
-        let mut payload_cursor = Cursor::new(message.get_payload());
-        let piece_index = payload_cursor.read_u32::<BigEndian>()?;
+        let mut payload_cursor = Cursor::new(&payload[0..4]);
+        let index = payload_cursor.read_u32::<BigEndian>()?;
+
+        // Check if piece index is valid
+        if index != piece_work.get_index() {
+            return Err(anyhow!("received invalid piece from peer"));
+        }
+
+        // Get byte offset within piece
+        let mut payload_cursor = Cursor::new(&payload[4..8]);
+        let begin = payload_cursor.read_u32::<BigEndian>()?;
+
+        // Get piece block
+        let mut block = &payload[8..].to_vec();
+
+        // Check if byte offset is valid
+        if block.len() > piece_work.get_data().len() {
+            return Err(anyhow!(
+                "received invalid byte offset within piece from peer"
+            ));
+        }
+
+        println!(
+            "Download piece {:?} [{:?}:{:?}] from peer {:?}",
+            index,
+            begin,
+            block.len(),
+            self.peer.get_id()
+        );
 
         Ok(())
     }
