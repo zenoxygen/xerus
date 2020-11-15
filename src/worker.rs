@@ -76,7 +76,7 @@ impl Worker {
     }
 
     /// Start worker.
-    pub fn start(&self) {
+    pub fn start_download(&self) {
         let peer_copy = self.peer.clone();
         let peer_id_copy = self.peer_id.clone();
         let info_hash_copy = self.info_hash.clone();
@@ -148,7 +148,7 @@ impl Worker {
 
         // Download torrent piece
         while piece_work.get_downloaded() < piece_work.get_length() {
-            // If client is unchoked by peer, send requests for pieces
+            // If client is unchoked by peer
             if !client.is_choked() {
                 while piece_work.get_requests() < NB_REQUESTS_MAX
                     && piece_work.get_requested() < piece_work.get_length()

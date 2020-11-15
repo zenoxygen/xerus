@@ -329,7 +329,7 @@ impl Torrent {
 
             // Start worker in a new thread
             thread::spawn(move || {
-                worker.start();
+                worker.start_download();
             });
         }
 
