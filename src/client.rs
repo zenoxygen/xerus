@@ -475,7 +475,7 @@ impl Client {
         let begin = payload_cursor.read_u32::<BigEndian>()?;
 
         // Get piece block
-        let mut block = &payload[8..].to_vec();
+        let block = &payload[8..].to_vec();
 
         // Check if byte offset is valid
         if block.len() > piece_work.get_data().len() {

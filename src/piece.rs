@@ -31,9 +31,11 @@ pub struct PieceWork {
     length: u32,
     // Piece data
     data: Vec<u8>,
-    // Requested counter in bytes
+    // Requests number sent
+    requests: u32,
+    // Size of requested data in bytes
     requested: u32,
-    // Downloaded counter in bytes
+    // Size of downloaded data in bytes
     downloaded: u32,
 }
 
@@ -61,6 +63,7 @@ impl PieceWork {
             hash,
             length,
             data: vec![0; length as usize],
+            requests: 0,
             requested: 0,
             downloaded: 0,
         };
@@ -83,22 +86,32 @@ impl PieceWork {
         self.data.to_vec()
     }
 
-    /// Get work piece requested counter.
+    /// Get number of requests sent.
+    pub fn get_requests(&self) -> u32 {
+        self.requests
+    }
+
+    /// Set number of requests sent.
+    pub fn set_requests(&mut self, requests: u32) {
+        self.requests = requests
+    }
+
+    /// Get size of requested data in bytes.
     pub fn get_requested(&self) -> u32 {
         self.requested
     }
 
-    /// Set work piece requested counter.
+    /// Set size of requested data in bytes.
     pub fn set_requested(&mut self, requested: u32) {
         self.requested = requested
     }
 
-    /// Get work piece downloaded counter.
+    /// Get size of downloaded data in bytes.
     pub fn get_downloaded(&self) -> u32 {
         self.downloaded
     }
 
-    /// Set work piece downloaded counter.
+    /// Set size of downloaded data in bytes.
     pub fn set_downloaded(&mut self, downloaded: u32) {
         self.downloaded = downloaded
     }

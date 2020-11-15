@@ -33,11 +33,11 @@ use crate::piece::*;
 use anyhow::Result;
 use crossbeam_channel::{Receiver, Sender};
 
-use std::thread;
-use std::time::Duration;
+// Maximum number of requests
+const NB_REQUESTS_MAX: u32 = 5;
 
 // Block size limit (2^14) in bytes
-const BLOCK_SIZE_LIMIT: u32 = 16384;
+const BLOCK_SIZE_MAX: u32 = 16384;
 
 pub struct Worker {
     peer: Peer,
@@ -145,15 +145,29 @@ impl Worker {
         while piece_work.get_downloaded() < piece_work.get_length() {
             // If client is unchoked by peer, send requests for pieces
             if !client.is_choked() {
-                while piece_work.get_requested() < piece_work.get_length() {
+                while piece_work.get_requests() < NB_REQUESTS_MAX
+                    && piece_work.get_requested() < piece_work.get_length()
+                {
+                    let mut block_size = BLOCK_SIZE_MAX;
+
+                    // Get the remaining length of data to request
+                    let remaining = piece_work.get_length() - piece_work.get_requested();
+                    if remaining < BLOCK_SIZE_MAX {
+                        block_size = remaining;
+                    }
+
                     // Send request for a block
                     client.send_request(
                         piece_work.get_index(),
                         piece_work.get_requested(),
-                        BLOCK_SIZE_LIMIT,
+                        block_size,
                     )?;
-                    // Update requested counter
-                    piece_work.set_requested(piece_work.get_requested() + BLOCK_SIZE_LIMIT);
+
+                    // Update number of requests sent
+                    piece_work.set_requests(piece_work.get_requests() + 1);
+
+                    // Update size of requested data
+                    piece_work.set_requested(piece_work.get_requested() + BLOCK_SIZE_MAX);
                 }
             }
 
