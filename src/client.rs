@@ -210,7 +210,7 @@ impl Client {
         }
 
         // Read message
-        let mut message_buf: Vec<u8> = vec![0; message_len as usize];
+        let mut message_buf: Vec<u8> = vec![0; message_len];
         if self.conn.read_exact(&mut message_buf).is_err() {
             return Err(anyhow!("could not read message received from peer"));
         }
@@ -224,7 +224,7 @@ impl Client {
     /// Read message length.
     fn read_message_len(&mut self) -> Result<usize> {
         // Read bytes into buffer
-        let mut buf = [0; 4];
+        let mut buf = vec![0; 4];
         if self.conn.read_exact(&mut buf).is_err() {
             return Err(anyhow!("could not read message length received from peer"));
         }

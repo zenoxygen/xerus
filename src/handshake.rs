@@ -100,29 +100,14 @@ impl Handshake {
 /// * `pstrlen` - Length of protocol identifier.
 ///
 pub fn deserialize_handshake(handshake_buf: &Vec<u8>, pstrlen: usize) -> Result<Handshake> {
-    let mut pstr = vec![];
-    let mut reserved = vec![0; 8];
-    let mut info_hash = vec![];
-    let mut peer_id = vec![];
-
-    for (i, x) in handshake_buf.iter().enumerate() {
-        // Get pstr
-        if i < pstrlen {
-            pstr.push(x.to_owned());
-        }
-        // Get reserved
-        if i >= pstrlen && i < pstrlen + 8 {
-            reserved.push(x.to_owned());
-        }
-        // Get info hash
-        if i >= pstrlen + 8 && i < pstrlen + 8 + 20 {
-            info_hash.push(x.to_owned());
-        }
-        // Get peer id
-        if i >= pstrlen + 8 + 20 {
-            peer_id.push(x.to_owned());
-        }
-    }
+    // Get pstr
+    let pstr = handshake_buf[0..pstrlen].to_vec();
+    // Get reserved
+    let reserved = handshake_buf[pstrlen..(pstrlen + 8)].to_vec();
+    // Get info hash
+    let info_hash = handshake_buf[(pstrlen + 8)..(pstrlen + 8 + 20)].to_vec();
+    // Get peer id
+    let peer_id = handshake_buf[(pstrlen + 8 + 20)..].to_vec();
 
     // Build handshake
     let handshake = Handshake {

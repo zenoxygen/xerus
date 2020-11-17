@@ -84,12 +84,10 @@ impl Message {
         let message_len = 1 + self.payload.len();
 
         // Create a new buffer
-        let mut serialized: Vec<u8> = vec![0; 4 + message_len];
+        let mut serialized: Vec<u8> = vec![];
 
         // Add message length
-        let mut len: Vec<u8> = vec![];
-        len.write_u32::<BigEndian>(message_len as u32)?;
-        serialized.append(&mut len);
+        serialized.write_u32::<BigEndian>(message_len as u32)?;
 
         // Add message id
         serialized.push(self.id);
@@ -114,15 +112,10 @@ pub fn deserialize_message(message_buf: &Vec<u8>, message_len: usize) -> Result<
     let id: MessageId = message_buf[0];
 
     // Get message payload
-    let mut payload: MessagePayload = vec![];
-    for (i, x) in message_buf.iter().enumerate() {
-        if i > 0 && i < message_len {
-            payload.push(x.to_owned());
-        }
-    }
+    let payload: MessagePayload = message_buf[1..message_len].to_vec();
 
     // Build message
-    let message = Message::new_with_payload(id, payload);
+    let message: Message = Message::new_with_payload(id, payload);
 
     Ok(message)
 }
