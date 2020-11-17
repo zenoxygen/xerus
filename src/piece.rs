@@ -76,6 +76,11 @@ impl PieceWork {
         self.index
     }
 
+    /// Get work piece hash.
+    pub fn get_hash(&self) -> Vec<u8> {
+        self.hash.to_vec()
+    }
+
     /// Get work piece length.
     pub fn get_length(&self) -> u32 {
         self.length

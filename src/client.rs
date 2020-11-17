@@ -207,6 +207,7 @@ impl Client {
         // If message length is 0, it's a keep-alive
         if message_len == 0 {
             println!("Receive KEEP_ALIVE from peer {:?}", self.peer.get_id());
+            return Err(anyhow!("keep-alive"));
         }
 
         // Read message
@@ -451,6 +452,7 @@ impl Client {
             return Err(anyhow!("received invalid MESSAGE_HAVE from peer"));
         }
 
+        // Get message payload
         let payload: Vec<u8> = message.get_payload();
 
         // Get piece index
@@ -464,13 +466,14 @@ impl Client {
 
         // Get byte offset within piece
         let mut payload_cursor = Cursor::new(&payload[4..8]);
-        let begin = payload_cursor.read_u32::<BigEndian>()?;
+        let offset: u32 = payload_cursor.read_u32::<BigEndian>()?;
 
         // Get piece block
-        let block = &payload[8..].to_vec();
+        let mut block: Vec<u8> = payload[8..].to_vec();
+        let block_len: u32 = block.len() as u32;
 
         // Check if byte offset is valid
-        if block.len() > piece_work.get_data().len() {
+        if offset + block_len > piece_work.get_data().len() as u32 {
             return Err(anyhow!(
                 "received invalid byte offset within piece from peer"
             ));
@@ -479,10 +482,15 @@ impl Client {
         println!(
             "Download piece {:?} [{:?}:{:?}] from peer {:?}",
             index,
-            begin,
-            block.len(),
+            offset,
+            offset + block_len,
             self.peer.get_id()
         );
+
+        // Add block to piece data
+        piece_work.get_data().append(&mut block);
+        piece_work.set_downloaded(piece_work.get_downloaded() + block_len);
+        piece_work.set_requests(piece_work.get_requests() - 1);
 
         Ok(())
     }

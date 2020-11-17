@@ -30,8 +30,10 @@ use crate::message::*;
 use crate::peer::*;
 use crate::piece::*;
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use crossbeam_channel::{Receiver, Sender};
+use crypto::digest::Digest;
+use crypto::sha1::Sha1;
 
 // Maximum number of requests
 const NB_REQUESTS_MAX: u32 = 5;
@@ -116,7 +118,7 @@ impl Worker {
             // Receive a piece from work channel
             let mut piece_work: PieceWork = match self.work_chan.1.recv() {
                 Ok(piece_work) => piece_work,
-                Err(_) => return,
+                Err(_) => continue,
             };
 
             // Check if remote peer has piece
@@ -125,12 +127,25 @@ impl Worker {
                 if self.work_chan.0.send(piece_work).is_err() {
                     println!("Error: could not send work piece to channel")
                 }
-                return;
+                continue;
             }
 
             // Download piece
             if self.download_piece(&mut client, &mut piece_work).is_err() {
-                return;
+                // Resend piece to work channel
+                if self.work_chan.0.send(piece_work).is_err() {
+                    println!("Error: could not send work piece to channel")
+                }
+                continue;
+            }
+
+            // Verify piece integrity
+            if self.verify_piece_integrity(&mut piece_work).is_err() {
+                // Resend piece to work channel
+                if self.work_chan.0.send(piece_work).is_err() {
+                    println!("Error: could not send work piece to channel")
+                }
+                continue;
             }
         }
     }
@@ -171,7 +186,7 @@ impl Worker {
                     piece_work.set_requests(piece_work.get_requests() + 1);
 
                     // Update size of requested data
-                    piece_work.set_requested(piece_work.get_requested() + BLOCK_SIZE_MAX);
+                    piece_work.set_requested(piece_work.get_requested() + block_size);
                 }
             }
 
@@ -187,6 +202,37 @@ impl Worker {
                 _ => println!("received unknown message from peer"),
             }
         }
+        Ok(())
+    }
+
+    /// Verify the integrity of a downloaded torrent piece.
+    ///
+    /// # Arguments
+    ///
+    /// * `piece_work` - A piece to download.
+    ///
+    fn verify_piece_integrity(&self, piece_work: &mut PieceWork) -> Result<()> {
+        // Hash piece data
+        let mut hasher = Sha1::new();
+        let piece_data = piece_work.get_data().clone();
+        hasher.input(&piece_data);
+        // Read hash digest
+        let hex = hasher.result_str();
+        // Decoded hex string into bytes
+        let decoded: Vec<u8> = hex::decode(hex)?;
+
+        // Compare hashes
+        if decoded != piece_work.get_hash() {
+            return Err(anyhow!(
+                "could not verify integrity of piece downloaded from peer"
+            ));
+        }
+
+        println!(
+            "Successfully verified integrity of piece {:?}",
+            piece_work.get_index()
+        );
+
         Ok(())
     }
 }
