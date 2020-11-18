@@ -207,13 +207,20 @@ impl Torrent {
         };
 
         // Build blocking HTTP client
-        let client = reqwest::blocking::Client::builder()
+        let client = match reqwest::blocking::Client::builder()
             .timeout(Duration::from_secs(15))
-            .build()?;
+            .build()
+        {
+            Ok(client) => client,
+            Err(_) => return Err(anyhow!("could not connect to tracker")),
+        };
 
         // Send GET request to the tracker
         println!("Send request to torrent tracker...");
-        let response = client.get(&tracker_url).send().unwrap().bytes()?;
+        let response = match client.get(&tracker_url).send().unwrap().bytes() {
+            Ok(response) => response,
+            Err(_) => return Err(anyhow!("could not get response from tracker")),
+        };
 
         // Deserialize bencoded tracker response
         let tracker_bencode = match de::from_bytes::<BencodeTracker>(&response) {
