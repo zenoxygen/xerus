@@ -24,19 +24,19 @@ use anyhow::Result;
 #[derive(Default, Debug, Clone)]
 pub struct PieceWork {
     // Piece index
-    index: u32,
+    pub index: u32,
     // Piece hash
-    hash: Vec<u8>,
+    pub hash: Vec<u8>,
     // Piece length
-    length: u32,
+    pub length: u32,
     // Piece data
-    data: Vec<u8>,
+    pub data: Vec<u8>,
     // Requests number sent
-    requests: u32,
+    pub requests: u32,
     // Size of requested data in bytes
-    requested: u32,
+    pub requested: u32,
     // Size of downloaded data in bytes
-    downloaded: u32,
+    pub downloaded: u32,
 }
 
 /// PieceResult structure.
@@ -69,55 +69,5 @@ impl PieceWork {
         };
 
         Ok(piece_work)
-    }
-
-    /// Get work piece index.
-    pub fn get_index(&self) -> u32 {
-        self.index
-    }
-
-    /// Get work piece hash.
-    pub fn get_hash(&self) -> Vec<u8> {
-        self.hash.to_vec()
-    }
-
-    /// Get work piece length.
-    pub fn get_length(&self) -> u32 {
-        self.length
-    }
-
-    /// Get work piece data.
-    pub fn get_data(&self) -> Vec<u8> {
-        self.data.to_vec()
-    }
-
-    /// Get number of requests sent.
-    pub fn get_requests(&self) -> u32 {
-        self.requests
-    }
-
-    /// Set number of requests sent.
-    pub fn set_requests(&mut self, requests: u32) {
-        self.requests = requests
-    }
-
-    /// Get size of requested data in bytes.
-    pub fn get_requested(&self) -> u32 {
-        self.requested
-    }
-
-    /// Set size of requested data in bytes.
-    pub fn set_requested(&mut self, requested: u32) {
-        self.requested = requested
-    }
-
-    /// Get size of downloaded data in bytes.
-    pub fn get_downloaded(&self) -> u32 {
-        self.downloaded
-    }
-
-    /// Set size of downloaded data in bytes.
-    pub fn set_downloaded(&mut self, downloaded: u32) {
-        self.downloaded = downloaded
     }
 }

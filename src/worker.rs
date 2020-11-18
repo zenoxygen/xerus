@@ -118,11 +118,11 @@ impl Worker {
             // Receive a piece from work channel
             let mut piece_work: PieceWork = match self.work_chan.1.recv() {
                 Ok(piece_work) => piece_work,
-                Err(_) => continue,
+                Err(_) => return,
             };
 
             // Check if remote peer has piece
-            if !client.has_piece(piece_work.get_index()) {
+            if !client.has_piece(piece_work.index) {
                 // Resend piece to work channel
                 if self.work_chan.0.send(piece_work).is_err() {
                     println!("Error: could not send work piece to channel")
@@ -136,7 +136,7 @@ impl Worker {
                 if self.work_chan.0.send(piece_work).is_err() {
                     println!("Error: could not send work piece to channel")
                 }
-                continue;
+                return;
             }
 
             // Verify piece integrity
@@ -146,6 +146,13 @@ impl Worker {
                     println!("Error: could not send work piece to channel")
                 }
                 continue;
+            }
+
+            // Notify peer that piece was downloaded
+            if client.send_have(piece_work.index).is_err() {
+                println!("DOWNLOADED\n");
+                println!("Error: could not notify peer that piece was downloaded");
+                return;
             }
         }
     }
@@ -162,31 +169,27 @@ impl Worker {
         client.set_connection_timeout(30)?;
 
         // Download torrent piece
-        while piece_work.get_downloaded() < piece_work.get_length() {
+        while piece_work.downloaded < piece_work.length {
             // If client is unchoked by peer
             if !client.is_choked() {
-                while piece_work.get_requests() < NB_REQUESTS_MAX
-                    && piece_work.get_requested() < piece_work.get_length()
+                while piece_work.requests < NB_REQUESTS_MAX
+                    && piece_work.requested < piece_work.length
                 {
                     // Get block size to request
                     let mut block_size = BLOCK_SIZE_MAX;
-                    let remaining = piece_work.get_length() - piece_work.get_requested();
+                    let remaining = piece_work.length - piece_work.requested;
                     if remaining < BLOCK_SIZE_MAX {
                         block_size = remaining;
                     }
 
                     // Send request for a block
-                    client.send_request(
-                        piece_work.get_index(),
-                        piece_work.get_requested(),
-                        block_size,
-                    )?;
+                    client.send_request(piece_work.index, piece_work.requested, block_size)?;
 
                     // Update number of requests sent
-                    piece_work.set_requests(piece_work.get_requests() + 1);
+                    piece_work.requests += 1;
 
                     // Update size of requested data
-                    piece_work.set_requested(piece_work.get_requested() + block_size);
+                    piece_work.requested += block_size;
                 }
             }
 
@@ -212,17 +215,24 @@ impl Worker {
     /// * `piece_work` - A piece to download.
     ///
     fn verify_piece_integrity(&self, piece_work: &mut PieceWork) -> Result<()> {
+        println!(
+            "Verify integrity of piece {:?} from peer {:?}",
+            piece_work.index,
+            self.peer.get_id(),
+        );
+
         // Hash piece data
         let mut hasher = Sha1::new();
-        let piece_data = piece_work.get_data().clone();
-        hasher.input(&piece_data);
+        hasher.input(&piece_work.data);
+
         // Read hash digest
         let hex = hasher.result_str();
+
         // Decoded hex string into bytes
         let decoded: Vec<u8> = hex::decode(hex)?;
 
         // Compare hashes
-        if decoded != piece_work.get_hash() {
+        if decoded != piece_work.hash {
             return Err(anyhow!(
                 "could not verify integrity of piece downloaded from peer"
             ));
@@ -230,7 +240,7 @@ impl Worker {
 
         println!(
             "Successfully verified integrity of piece {:?}",
-            piece_work.get_index()
+            piece_work.index
         );
 
         Ok(())

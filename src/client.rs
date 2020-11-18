@@ -309,8 +309,11 @@ impl Client {
     }
 
     /// Send HAVE message to remote peer.
-    pub fn send_have(&mut self) -> Result<()> {
-        let message: Message = Message::new(MESSAGE_HAVE);
+    pub fn send_have(&mut self, index: u32) -> Result<()> {
+        let mut payload: Vec<u8> = vec![];
+        payload.write_u32::<BigEndian>(index)?;
+
+        let message: Message = Message::new_with_payload(MESSAGE_HAVE, payload);
         let message_encoded = message.serialize()?;
 
         println!("Send MESSAGE_HAVE to peer {:?}", self.peer.get_id());
@@ -445,7 +448,7 @@ impl Client {
     /// * `piece_work` - A work piece.
     ///
     pub fn read_piece(&mut self, message: Message, piece_work: &mut PieceWork) -> Result<()> {
-        println!("Receive MESSAGE_PIECE from {:?}", self.peer.get_id());
+        println!("Receive MESSAGE_PIECE from peer {:?}", self.peer.get_id());
 
         // Check if message id and payload are valid
         if message.get_id() != MESSAGE_PIECE || message.get_payload().len() < 8 {
@@ -460,7 +463,7 @@ impl Client {
         let index = payload_cursor.read_u32::<BigEndian>()?;
 
         // Check if piece index is valid
-        if index != piece_work.get_index() {
+        if index != piece_work.index {
             return Err(anyhow!("received invalid piece from peer"));
         }
 
@@ -469,11 +472,11 @@ impl Client {
         let offset: u32 = payload_cursor.read_u32::<BigEndian>()?;
 
         // Get piece block
-        let mut block: Vec<u8> = payload[8..].to_vec();
+        let block: Vec<u8> = payload[8..].to_vec();
         let block_len: u32 = block.len() as u32;
 
         // Check if byte offset is valid
-        if offset + block_len > piece_work.get_data().len() as u32 {
+        if offset + block_len > piece_work.length as u32 {
             return Err(anyhow!(
                 "received invalid byte offset within piece from peer"
             ));
@@ -488,9 +491,15 @@ impl Client {
         );
 
         // Add block to piece data
-        piece_work.get_data().append(&mut block);
-        piece_work.set_downloaded(piece_work.get_downloaded() + block_len);
-        piece_work.set_requests(piece_work.get_requests() - 1);
+        for i in 0..block_len {
+            piece_work.data[offset as usize + i as usize] = block[i as usize];
+        }
+
+        // Update size of downloaded data
+        piece_work.downloaded += block_len;
+
+        // Update number of requests sent
+        piece_work.requests -= 1;
 
         Ok(())
     }

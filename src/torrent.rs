@@ -112,11 +112,14 @@ impl BencodeInfo {
     fn hash(&self) -> Result<Vec<u8>> {
         // Serialize bencoded informations
         let buf: Vec<u8> = ser::to_bytes::<BencodeInfo>(self)?;
+
         // Hash bencoded informations
         let mut hasher = Sha1::new();
         hasher.input(&buf);
+
         // Read hash digest
         let hex = hasher.result_str();
+
         // Decoded hex string into bytes
         let decoded: Vec<u8> = hex::decode(hex)?;
 
