@@ -217,9 +217,12 @@ impl Torrent {
 
         // Send GET request to the tracker
         println!("Send request to torrent tracker...");
-        let response = match client.get(&tracker_url).send().unwrap().bytes() {
-            Ok(response) => response,
-            Err(_) => return Err(anyhow!("could not get response from tracker")),
+        let response = match client.get(&tracker_url).send() {
+            Ok(response) => match response.bytes() {
+                Ok(bytes) => bytes,
+                Err(_) => return Err(anyhow!("could not read response from tracker")),
+            },
+            Err(_) => return Err(anyhow!("could not send request to tracker")),
         };
 
         // Deserialize bencoded tracker response
