@@ -302,7 +302,7 @@ impl Torrent {
     ///
     /// * `filepath` - Path where to save the file.
     ///
-    pub fn download(&self, filepath: PathBuf) -> Result<()> {
+    pub fn download(&self, filepath: PathBuf) -> Result<Vec<u8>> {
         let peers = self.peers.to_owned();
 
         // Create work pieces channel
@@ -317,7 +317,7 @@ impl Torrent {
             let piece_index = index as u32;
             let piece_hash = self.pieces_hashes[index].clone();
             let piece_length = self.piece_length;
-            let piece_work = PieceWork::new(piece_index, piece_hash, piece_length)?;
+            let piece_work = PieceWork::new(piece_index, piece_hash, piece_length);
 
             // Send piece to work channel
             work_chan.0.send(piece_work)?;
@@ -346,8 +346,27 @@ impl Torrent {
             });
         }
 
-        while 1 == 1 {}
+        // Build torrent
+        let mut nb_pieces_downloaded = 0;
+        let mut torrent_data: Vec<u8> = vec![0; self.length as usize];
 
-        Ok(())
+        while nb_pieces_downloaded < self.pieces_hashes.len() {
+            // Receive a piece from result channel
+            let piece_result: PieceResult = match result_chan.1.recv() {
+                Ok(piece_result) => piece_result,
+                Err(_) => return Err(anyhow!("Error: could not receive piece from channel")),
+            };
+
+            // Add piece data to torrent data
+            let offset: u32 = piece_result.index * self.piece_length;
+            for i in 0..piece_result.data.len() {
+                torrent_data[offset as usize + i as usize] = piece_result.data[i as usize];
+            }
+
+            // Update number of pieces downloaded
+            nb_pieces_downloaded += 1;
+        }
+
+        Ok(torrent_data)
     }
 }

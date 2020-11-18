@@ -18,8 +18,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use anyhow::Result;
-
 /// PieceWork structure.
 #[derive(Default, Debug, Clone)]
 pub struct PieceWork {
@@ -43,13 +41,13 @@ pub struct PieceWork {
 #[derive(Default, Debug, Clone)]
 pub struct PieceResult {
     // Piece index
-    index: u32,
+    pub index: u32,
     // Piece data
-    data: Vec<u8>,
+    pub data: Vec<u8>,
 }
 
 impl PieceWork {
-    /// Build a new piece.
+    /// Build a new work piece.
     ///
     /// # Arguments
     ///
@@ -57,8 +55,8 @@ impl PieceWork {
     /// * `hash` - The piece hash.
     /// * `length` - The piece length.
     ///
-    pub fn new(index: u32, hash: Vec<u8>, length: u32) -> Result<PieceWork> {
-        let piece_work = PieceWork {
+    pub fn new(index: u32, hash: Vec<u8>, length: u32) -> PieceWork {
+        PieceWork {
             index,
             hash,
             length,
@@ -66,8 +64,19 @@ impl PieceWork {
             requests: 0,
             requested: 0,
             downloaded: 0,
-        };
+        }
+    }
+}
 
-        Ok(piece_work)
+impl PieceResult {
+    /// Build a new result piece.
+    ///
+    /// # Arguments
+    ///
+    /// * `index` - The piece index.
+    /// * `data` - The piece data.
+    ///
+    pub fn new(index: u32, data: Vec<u8>) -> PieceResult {
+        PieceResult { index, data }
     }
 }

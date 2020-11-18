@@ -118,14 +118,17 @@ impl Worker {
             // Receive a piece from work channel
             let mut piece_work: PieceWork = match self.work_chan.1.recv() {
                 Ok(piece_work) => piece_work,
-                Err(_) => return,
+                Err(_) => {
+                    println!("Error: could not receive piece from channel");
+                    return;
+                }
             };
 
             // Check if remote peer has piece
             if !client.has_piece(piece_work.index) {
                 // Resend piece to work channel
                 if self.work_chan.0.send(piece_work).is_err() {
-                    println!("Error: could not send work piece to channel")
+                    println!("Error: could not send piece to channel")
                 }
                 continue;
             }
@@ -134,7 +137,7 @@ impl Worker {
             if self.download_piece(&mut client, &mut piece_work).is_err() {
                 // Resend piece to work channel
                 if self.work_chan.0.send(piece_work).is_err() {
-                    println!("Error: could not send work piece to channel")
+                    println!("Error: could not send piece to channel")
                 }
                 return;
             }
@@ -143,16 +146,21 @@ impl Worker {
             if self.verify_piece_integrity(&mut piece_work).is_err() {
                 // Resend piece to work channel
                 if self.work_chan.0.send(piece_work).is_err() {
-                    println!("Error: could not send work piece to channel")
+                    println!("Error: could not send piece to channel")
                 }
                 continue;
             }
 
             // Notify peer that piece was downloaded
             if client.send_have(piece_work.index).is_err() {
-                println!("DOWNLOADED\n");
                 println!("Error: could not notify peer that piece was downloaded");
                 return;
+            }
+
+            // Send piece to result channel
+            let piece_result = PieceResult::new(piece_work.index, piece_work.data);
+            if self.result_chan.0.send(piece_result).is_err() {
+                println!("Error: could not send piece to channel")
             }
         }
     }
@@ -215,12 +223,6 @@ impl Worker {
     /// * `piece_work` - A piece to download.
     ///
     fn verify_piece_integrity(&self, piece_work: &mut PieceWork) -> Result<()> {
-        println!(
-            "Verify integrity of piece {:?} from peer {:?}",
-            piece_work.index,
-            self.peer.get_id(),
-        );
-
         // Hash piece data
         let mut hasher = Sha1::new();
         hasher.input(&piece_work.data);
