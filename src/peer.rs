@@ -30,10 +30,12 @@ use std::net::Ipv4Addr;
 
 const PEER_SIZE: usize = 6;
 
+type PeerId = u32;
+
 /// Peer structure.
 #[derive(Clone)]
 pub struct Peer {
-    pub id: usize,
+    pub id: PeerId,
     pub ip: Ipv4Addr,
     pub port: u16,
 }
@@ -49,7 +51,7 @@ impl Peer {
     }
 
     /// Get peer id.
-    pub fn get_id(&self) -> usize {
+    pub fn get_id(&self) -> u32 {
         self.id
     }
 
@@ -88,7 +90,7 @@ impl Torrent {
 
         for i in 0..nb_peers {
             // Create peer ID
-            peers[i].id = i;
+            peers[i].id = i as u32;
             let offset = i * PEER_SIZE;
             // Add peer IP address
             peers[i].ip = Ipv4Addr::new(
