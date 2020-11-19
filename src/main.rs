@@ -56,7 +56,7 @@ fn run(args: clap::ArgMatches) -> Result<()> {
 
 fn main() {
     // Initialize logger
-    pretty_env_logger::init();
+    pretty_env_logger::init_timed();
 
     // Parse arguments
     let args = parse_args();
