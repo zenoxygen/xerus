@@ -4,3 +4,11 @@
 # xerus
 
 A command-line BitTorrent client, written in Rust.
+
+## Debug
+
+Run with the environment variable set:
+
+```
+RUST_LOG=trace ./target/debug/xerus -f <file> -t <torrent>
+```
