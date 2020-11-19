@@ -139,7 +139,7 @@ impl Worker {
                 if self.work_chan.0.send(piece_work).is_err() {
                     error!("Error: could not send piece to channel")
                 }
-                continue;
+                return;
             }
 
             // Verify piece integrity
@@ -174,7 +174,7 @@ impl Worker {
     ///
     fn download_piece(&self, client: &mut Client, piece_work: &mut PieceWork) -> Result<()> {
         // Set client connection timeout
-        client.set_connection_timeout(30)?;
+        client.set_connection_timeout(120)?;
 
         // Download torrent piece
         while piece_work.downloaded < piece_work.length {
