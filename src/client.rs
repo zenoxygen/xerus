@@ -65,7 +65,7 @@ impl Client {
             Err(_) => return Err(anyhow!("could not connect to peer")),
         };
 
-        println!("Connected to peer {:?}", peer.get_id());
+        info!("Connected to peer {:?}", peer.get_id());
 
         // Return new client
         let client = Client {
@@ -206,7 +206,7 @@ impl Client {
 
         // If message length is 0, it's a keep-alive
         if message_len == 0 {
-            println!("Receive KEEP_ALIVE from peer {:?}", self.peer.get_id());
+            info!("Receive KEEP_ALIVE from peer {:?}", self.peer.get_id());
             return Err(anyhow!("keep-alive"));
         }
 
@@ -242,7 +242,7 @@ impl Client {
         let message: Message = Message::new(MESSAGE_CHOKE);
         let message_encoded = message.serialize()?;
 
-        println!("Send MESSAGE_CHOKE to peer {:?}", self.peer.get_id());
+        info!("Send MESSAGE_CHOKE to peer {:?}", self.peer.get_id());
 
         if self.conn.write(&message_encoded).is_err() {
             return Err(anyhow!("could not send MESSAGE_CHOKE to peer"));
@@ -253,7 +253,7 @@ impl Client {
 
     // Read CHOKE message from remote peer.
     pub fn read_choke(&mut self) {
-        println!("Receive MESSAGE_CHOKE from peer {:?}", self.peer.get_id());
+        info!("Receive MESSAGE_CHOKE from peer {:?}", self.peer.get_id());
         self.choked = true
     }
 
@@ -262,7 +262,7 @@ impl Client {
         let message: Message = Message::new(MESSAGE_UNCHOKE);
         let message_encoded = message.serialize()?;
 
-        println!("Send MESSAGE_UNCHOKE to peer {:?}", self.peer.get_id());
+        info!("Send MESSAGE_UNCHOKE to peer {:?}", self.peer.get_id());
 
         if self.conn.write(&message_encoded).is_err() {
             return Err(anyhow!("could not send MESSAGE_UNCHOKE to peer"));
@@ -273,7 +273,7 @@ impl Client {
 
     // Read UNCHOKE message from remote peer.
     pub fn read_unchoke(&mut self) {
-        println!("Receive MESSAGE_UNCHOKE from peer {:?}", self.peer.get_id());
+        info!("Receive MESSAGE_UNCHOKE from peer {:?}", self.peer.get_id());
         self.choked = false
     }
 
@@ -282,7 +282,7 @@ impl Client {
         let message: Message = Message::new(MESSAGE_INTERESTED);
         let message_encoded = message.serialize()?;
 
-        println!("Send MESSAGE_INTERESTED to peer {:?}", self.peer.get_id());
+        info!("Send MESSAGE_INTERESTED to peer {:?}", self.peer.get_id());
 
         if self.conn.write(&message_encoded).is_err() {
             return Err(anyhow!("could not send MESSAGE_INTERESTED to peer"));
@@ -296,7 +296,7 @@ impl Client {
         let message: Message = Message::new(MESSAGE_NOT_INTERESTED);
         let message_encoded = message.serialize()?;
 
-        println!(
+        info!(
             "Send MESSAGE_NOT_INTERESTED to peer {:?}",
             self.peer.get_id()
         );
@@ -316,7 +316,7 @@ impl Client {
         let message: Message = Message::new_with_payload(MESSAGE_HAVE, payload);
         let message_encoded = message.serialize()?;
 
-        println!("Send MESSAGE_HAVE to peer {:?}", self.peer.get_id());
+        info!("Send MESSAGE_HAVE to peer {:?}", self.peer.get_id());
 
         if self.conn.write(&message_encoded).is_err() {
             return Err(anyhow!("could not send MESSAGE_HAVE to peer"));
@@ -334,7 +334,7 @@ impl Client {
     /// * `message` - The message to parse.
     ///
     pub fn read_have(&mut self, message: Message) -> Result<()> {
-        println!("Receive MESSAGE_HAVE from peer {:?}", self.peer.get_id());
+        info!("Receive MESSAGE_HAVE from peer {:?}", self.peer.get_id());
 
         // Check if message id and payload are valid
         if message.get_id() != MESSAGE_HAVE || message.get_payload().len() != 4 {
@@ -356,7 +356,7 @@ impl Client {
         let message: Message = Message::new(MESSAGE_BITFIELD);
         let message_encoded = message.serialize()?;
 
-        println!("Send MESSAGE_BITFIELD to peer {:?}", self.peer.get_id());
+        info!("Send MESSAGE_BITFIELD to peer {:?}", self.peer.get_id());
 
         if self.conn.write(&message_encoded).is_err() {
             return Err(anyhow!("could not send MESSAGE_BITFIELD to peer"));
@@ -373,7 +373,7 @@ impl Client {
     /// Spare bits at the end are set to zero.
     ///
     pub fn read_bitfield(&mut self) -> Result<()> {
-        println!(
+        info!(
             "Receive MESSAGE_BITFIELD from peer {:?}",
             self.peer.get_id()
         );
@@ -406,7 +406,7 @@ impl Client {
         let message: Message = Message::new_with_payload(MESSAGE_REQUEST, payload);
         let message_encoded = message.serialize()?;
 
-        println!(
+        info!(
             "Send MESSAGE_REQUEST for piece {:?} [{:?}:{:?}] to peer {:?}",
             index,
             begin,
@@ -426,7 +426,7 @@ impl Client {
         let message: Message = Message::new(MESSAGE_PIECE);
         let message_encoded = message.serialize()?;
 
-        println!("Send MESSAGE_PIECE to {:?}", self.peer.get_id());
+        info!("Send MESSAGE_PIECE to {:?}", self.peer.get_id());
 
         if self.conn.write(&message_encoded).is_err() {
             return Err(anyhow!("could not send MESSAGE_PIECE to peer"));
@@ -448,7 +448,7 @@ impl Client {
     /// * `piece_work` - A work piece.
     ///
     pub fn read_piece(&mut self, message: Message, piece_work: &mut PieceWork) -> Result<()> {
-        println!("Receive MESSAGE_PIECE from peer {:?}", self.peer.get_id());
+        info!("Receive MESSAGE_PIECE from peer {:?}", self.peer.get_id());
 
         // Check if message id and payload are valid
         if message.get_id() != MESSAGE_PIECE || message.get_payload().len() < 8 {
@@ -482,7 +482,7 @@ impl Client {
             ));
         }
 
-        println!(
+        info!(
             "Download piece {:?} [{:?}:{:?}] from peer {:?}",
             index,
             offset,
@@ -509,7 +509,7 @@ impl Client {
         let message: Message = Message::new(MESSAGE_CANCEL);
         let message_encoded = message.serialize()?;
 
-        println!("Send MESSAGE_CANCEL to {:?}", self.peer.get_id());
+        info!("Send MESSAGE_CANCEL to {:?}", self.peer.get_id());
 
         if self.conn.write(&message_encoded).is_err() {
             return Err(anyhow!("could not send MESSAGE_CANCEL to peer"));
@@ -523,7 +523,7 @@ impl Client {
         let message: Message = Message::new(MESSAGE_PORT);
         let message_encoded = message.serialize()?;
 
-        println!("Send MESSAGE_PORT to {:?}", self.peer.get_id());
+        info!("Send MESSAGE_PORT to {:?}", self.peer.get_id());
 
         if self.conn.write(&message_encoded).is_err() {
             return Err(anyhow!("could not send MESSAGE_PORT to peer"));

@@ -33,6 +33,7 @@ use anyhow::{anyhow, Result};
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use crypto::digest::Digest;
 use crypto::sha1::Sha1;
+use indicatif::{ProgressBar, ProgressStyle};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use serde_bencode::{de, ser};
@@ -42,7 +43,7 @@ use url::Url;
 
 use std::borrow::Cow;
 use std::fs::File;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::thread;
 use std::time::Duration;
@@ -219,7 +220,6 @@ impl Torrent {
         };
 
         // Send GET request to the tracker
-        println!("Send request to torrent tracker...");
         let response = match client.get(&tracker_url).send() {
             Ok(response) => match response.bytes() {
                 Ok(bytes) => bytes,
@@ -302,8 +302,18 @@ impl Torrent {
     ///
     /// * `filepath` - Path where to save the file.
     ///
-    pub fn download(&self, filepath: PathBuf) -> Result<Vec<u8>> {
-        let peers = self.peers.to_owned();
+    pub fn download(&self, filepath: PathBuf) -> Result<()> {
+        println!(
+            "Downloading {:?} ({:?} pieces)",
+            self.name,
+            self.pieces_hashes.len(),
+        );
+
+        // Create new file
+        let mut file = match File::create(filepath) {
+            Ok(file) => file,
+            Err(_) => return Err(anyhow!("could not create file")),
+        };
 
         // Create work pieces channel
         let work_chan: (Sender<PieceWork>, Receiver<PieceWork>) = unbounded();
@@ -320,10 +330,13 @@ impl Torrent {
             let piece_work = PieceWork::new(piece_index, piece_hash, piece_length);
 
             // Send piece to work channel
-            work_chan.0.send(piece_work)?;
+            if work_chan.0.send(piece_work).is_err() {
+                return Err(anyhow!("Error: could not send piece to channel"));
+            }
         }
 
         // Init workers
+        let peers = self.peers.to_owned();
         for peer in peers {
             let peer_copy = peer.clone();
             let peer_id_copy = self.peer_id.clone();
@@ -346,10 +359,16 @@ impl Torrent {
             });
         }
 
+        // Create progress bar
+        let pb = ProgressBar::new(self.length as u64);
+        pb.set_style(
+            ProgressStyle::default_bar()
+                .template("{spinner:.green} {bytes}/{total_bytes} [{bar:40.cyan/blue}] {percent}%")
+                .progress_chars("#>-"),
+        );
+
         // Build torrent
         let mut nb_pieces_downloaded = 0;
-        let mut torrent_data: Vec<u8> = vec![0; self.length as usize];
-
         while nb_pieces_downloaded < self.pieces_hashes.len() {
             // Receive a piece from result channel
             let piece_result: PieceResult = match result_chan.1.recv() {
@@ -357,16 +376,16 @@ impl Torrent {
                 Err(_) => return Err(anyhow!("Error: could not receive piece from channel")),
             };
 
-            // Add piece data to torrent data
-            let offset: u32 = piece_result.index * self.piece_length;
-            for i in 0..piece_result.data.len() {
-                torrent_data[offset as usize + i as usize] = piece_result.data[i as usize];
-            }
+            // Write piece data into file
+            file.write(&piece_result.data)?;
+
+            // Update progress bar
+            pb.inc(piece_result.data.len() as u64);
 
             // Update number of pieces downloaded
             nb_pieces_downloaded += 1;
         }
 
-        Ok(torrent_data)
+        Ok(())
     }
 }

@@ -81,7 +81,6 @@ impl Torrent {
 
         // Get number of peers
         let nb_peers = tracker_peers.len() / PEER_SIZE;
-        println!("Received {:?} peers from tracker", nb_peers);
 
         // Build peers
         let mut peers: Vec<Peer> = vec![Peer::new(); nb_peers];

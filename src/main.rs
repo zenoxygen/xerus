@@ -18,6 +18,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+#[macro_use]
+extern crate log;
+
 mod args;
 mod client;
 mod handshake;
@@ -52,6 +55,9 @@ fn run(args: clap::ArgMatches) -> Result<()> {
 }
 
 fn main() {
+    // Initialize logger
+    pretty_env_logger::init();
+
     // Parse arguments
     let args = parse_args();
 
