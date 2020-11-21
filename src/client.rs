@@ -181,7 +181,7 @@ impl Client {
         Ok(())
     }
 
-    /// Read handshake length
+    /// Read handshake length.
     fn read_handshake_len(&mut self) -> Result<usize> {
         // Read 1 byte into buffer
         let mut buf = [0; 1];
@@ -237,7 +237,7 @@ impl Client {
         Ok(message_len as usize)
     }
 
-    // Read CHOKE message from remote peer.
+    /// Read CHOKE message from remote peer.
     pub fn read_choke(&mut self) {
         info!("Receive MESSAGE_CHOKE from peer {:?}", self.peer.get_id());
         self.choked = true
@@ -257,7 +257,7 @@ impl Client {
         Ok(())
     }
 
-    // Read UNCHOKE message from remote peer.
+    /// Read UNCHOKE message from remote peer.
     pub fn read_unchoke(&mut self) {
         info!("Receive MESSAGE_UNCHOKE from peer {:?}", self.peer.get_id());
         self.choked = false
