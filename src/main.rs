@@ -30,6 +30,8 @@ mod piece;
 mod torrent;
 mod worker;
 
+use std::fs::File;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Result};
@@ -41,16 +43,32 @@ fn run(args: clap::ArgMatches) -> Result<()> {
     let torrent = args.value_of("torrent").unwrap();
     let file = args.value_of("file").unwrap();
 
-    // Open and download torrent
+    // Check if torrent file exists
     if Path::new(&torrent).exists() {
         let torrent_filepath = PathBuf::from(torrent);
         let output_filepath = PathBuf::from(file);
+
+        // Create new file
+        let mut output_file = match File::create(output_filepath) {
+            Ok(file) => file,
+            Err(_) => return Err(anyhow!("could not create file")),
+        };
+
+        // Open and download torrent
         let mut torrent = Torrent::new();
         torrent.open(torrent_filepath)?;
-        torrent.download(output_filepath)?;
+        let data: Vec<u8> = torrent.download()?;
+
+        // Save data to file
+        if output_file.write(&data).is_err() {
+            return Err(anyhow!("could not write data to file"));
+        }
     } else {
         return Err(anyhow!("could not find torrent"));
     }
+
+    println!("Saved in {:?}.", file);
+
     Ok(())
 }
 

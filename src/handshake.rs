@@ -96,18 +96,18 @@ impl Handshake {
 ///
 /// # Arguments
 ///
-/// * `handshake_buf` - Bytes containing the handshake message.
+/// * `buf` - Bytes containing the handshake message.
 /// * `pstrlen` - Length of protocol identifier.
 ///
-pub fn deserialize_handshake(handshake_buf: &Vec<u8>, pstrlen: usize) -> Result<Handshake> {
+pub fn deserialize_handshake(buf: &Vec<u8>, pstrlen: usize) -> Result<Handshake> {
     // Get pstr
-    let pstr = handshake_buf[0..pstrlen].to_vec();
+    let pstr = buf[0..pstrlen].to_vec();
     // Get reserved
-    let reserved = handshake_buf[pstrlen..(pstrlen + 8)].to_vec();
+    let reserved = buf[pstrlen..(pstrlen + 8)].to_vec();
     // Get info hash
-    let info_hash = handshake_buf[(pstrlen + 8)..(pstrlen + 8 + 20)].to_vec();
+    let info_hash = buf[(pstrlen + 8)..(pstrlen + 8 + 20)].to_vec();
     // Get peer id
-    let peer_id = handshake_buf[(pstrlen + 8 + 20)..].to_vec();
+    let peer_id = buf[(pstrlen + 8 + 20)..].to_vec();
 
     // Build handshake
     let handshake = Handshake {

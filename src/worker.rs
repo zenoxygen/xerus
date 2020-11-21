@@ -120,7 +120,7 @@ impl Worker {
                 Ok(piece_work) => piece_work,
                 Err(_) => {
                     error!("Error: could not receive piece from channel");
-                    continue;
+                    return;
                 }
             };
 
@@ -128,7 +128,8 @@ impl Worker {
             if !client.has_piece(piece_work.index) {
                 // Resend piece to work channel
                 if self.work_chan.0.send(piece_work).is_err() {
-                    error!("Error: could not send piece to channel")
+                    error!("Error: could not send piece to channel");
+                    return;
                 }
                 continue;
             }
@@ -137,7 +138,8 @@ impl Worker {
             if self.download_piece(&mut client, &mut piece_work).is_err() {
                 // Resend piece to work channel
                 if self.work_chan.0.send(piece_work).is_err() {
-                    error!("Error: could not send piece to channel")
+                    error!("Error: could not send piece to channel");
+                    return;
                 }
                 return;
             }
@@ -146,7 +148,8 @@ impl Worker {
             if self.verify_piece_integrity(&mut piece_work).is_err() {
                 // Resend piece to work channel
                 if self.work_chan.0.send(piece_work).is_err() {
-                    error!("Error: could not send piece to channel")
+                    error!("Error: could not send piece to channel");
+                    return;
                 }
                 continue;
             }
@@ -154,13 +157,14 @@ impl Worker {
             // Notify peer that piece was downloaded
             if client.send_have(piece_work.index).is_err() {
                 error!("Error: could not notify peer that piece was downloaded");
-                continue;
             }
 
             // Send piece to result channel
-            let piece_result = PieceResult::new(piece_work.index, piece_work.data);
+            let piece_result =
+                PieceResult::new(piece_work.index, piece_work.length, piece_work.data);
             if self.result_chan.0.send(piece_result).is_err() {
-                error!("Error: could not send piece to channel")
+                error!("Error: could not send piece to channel");
+                return;
             }
         }
     }
@@ -175,6 +179,11 @@ impl Worker {
     fn download_piece(&self, client: &mut Client, piece_work: &mut PieceWork) -> Result<()> {
         // Set client connection timeout
         client.set_connection_timeout(120)?;
+
+        // Reset piece counters
+        piece_work.requests = 0;
+        piece_work.requested = 0;
+        piece_work.downloaded = 0;
 
         // Download torrent piece
         while piece_work.downloaded < piece_work.length {
@@ -213,6 +222,9 @@ impl Worker {
                 _ => info!("received unknown message from peer"),
             }
         }
+
+        info!("Successfully downloaded piece {:?}", piece_work.index);
+
         Ok(())
     }
 

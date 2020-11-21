@@ -27,13 +27,10 @@ type MessagePayload = Vec<u8>;
 pub const MESSAGE_CHOKE: MessageId = 0;
 pub const MESSAGE_UNCHOKE: MessageId = 1;
 pub const MESSAGE_INTERESTED: MessageId = 2;
-pub const MESSAGE_NOT_INTERESTED: MessageId = 3;
 pub const MESSAGE_HAVE: MessageId = 4;
 pub const MESSAGE_BITFIELD: MessageId = 5;
 pub const MESSAGE_REQUEST: MessageId = 6;
 pub const MESSAGE_PIECE: MessageId = 7;
-pub const MESSAGE_CANCEL: MessageId = 8;
-pub const MESSAGE_PORT: MessageId = 9;
 
 #[derive(Default, Debug)]
 pub struct Message {
@@ -110,10 +107,8 @@ impl Message {
 pub fn deserialize_message(message_buf: &Vec<u8>, message_len: usize) -> Result<Message> {
     // Get message id
     let id: MessageId = message_buf[0];
-
     // Get message payload
     let payload: MessagePayload = message_buf[1..message_len].to_vec();
-
     // Build message
     let message: Message = Message::new_with_payload(id, payload);
 

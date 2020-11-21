@@ -42,6 +42,8 @@ pub struct PieceWork {
 pub struct PieceResult {
     // Piece index
     pub index: u32,
+    // Piece length
+    pub length: u32,
     // Piece data
     pub data: Vec<u8>,
 }
@@ -74,9 +76,14 @@ impl PieceResult {
     /// # Arguments
     ///
     /// * `index` - The piece index.
+    /// * `length` - The piece length.
     /// * `data` - The piece data.
     ///
-    pub fn new(index: u32, data: Vec<u8>) -> PieceResult {
-        PieceResult { index, data }
+    pub fn new(index: u32, length: u32, data: Vec<u8>) -> PieceResult {
+        PieceResult {
+            index,
+            length,
+            data,
+        }
     }
 }

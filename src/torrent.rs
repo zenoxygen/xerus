@@ -43,7 +43,7 @@ use url::Url;
 
 use std::borrow::Cow;
 use std::fs::File;
-use std::io::{Read, Write};
+use std::io::Read;
 use std::path::PathBuf;
 use std::thread;
 use std::time::Duration;
@@ -131,12 +131,14 @@ impl BencodeInfo {
     fn split_pieces_hashes(&self) -> Result<Vec<Vec<u8>>> {
         let pieces = self.pieces.to_owned();
         let nb_pieces = pieces.len();
+
         // Check torrent pieces
         if nb_pieces % SHA1_HASH_SIZE != 0 {
             return Err(anyhow!("torrent is invalid"));
         }
         let nb_hashes = nb_pieces / SHA1_HASH_SIZE;
         let mut hashes: Vec<Vec<u8>> = vec![vec![0; 20]; nb_hashes];
+
         // Split pieces
         for i in 0..nb_hashes {
             hashes[i] = pieces[i * SHA1_HASH_SIZE..(i + 1) * SHA1_HASH_SIZE].to_vec();
@@ -297,23 +299,12 @@ impl Torrent {
     }
 
     /// Download torrent.
-    ///
-    /// # Arguments
-    ///
-    /// * `filepath` - Path where to save the file.
-    ///
-    pub fn download(&self, filepath: PathBuf) -> Result<()> {
+    pub fn download(&self) -> Result<Vec<u8>> {
         println!(
             "Downloading {:?} ({:?} pieces)",
             self.name,
             self.pieces_hashes.len(),
         );
-
-        // Create new file
-        let mut file = match File::create(filepath) {
-            Ok(file) => file,
-            Err(_) => return Err(anyhow!("could not create file")),
-        };
 
         // Create work pieces channel
         let work_chan: (Sender<PieceWork>, Receiver<PieceWork>) = unbounded();
@@ -326,7 +317,7 @@ impl Torrent {
             // Create piece
             let piece_index = index as u32;
             let piece_hash = self.pieces_hashes[index].clone();
-            let piece_length = self.piece_length;
+            let piece_length = self.get_piece_length(piece_index)?;
             let piece_work = PieceWork::new(piece_index, piece_hash, piece_length);
 
             // Send piece to work channel
@@ -368,6 +359,7 @@ impl Torrent {
         );
 
         // Build torrent
+        let mut data: Vec<u8> = vec![0; self.length as usize];
         let mut nb_pieces_downloaded = 0;
         while nb_pieces_downloaded < self.pieces_hashes.len() {
             // Receive a piece from result channel
@@ -376,16 +368,37 @@ impl Torrent {
                 Err(_) => return Err(anyhow!("Error: could not receive piece from channel")),
             };
 
-            // Write piece data into file
-            file.write(&piece_result.data)?;
+            // Copy piece data
+            let begin: u32 = piece_result.index * self.piece_length;
+            for i in 0..piece_result.length as usize {
+                data[begin as usize + i] = piece_result.data[i];
+            }
 
             // Update progress bar
-            pb.inc(piece_result.data.len() as u64);
+            pb.inc(piece_result.length as u64);
 
             // Update number of pieces downloaded
             nb_pieces_downloaded += 1;
         }
 
-        Ok(())
+        Ok(data)
+    }
+
+    /// Get piece length.
+    ///
+    /// # Arguments
+    ///
+    /// * `index` - The piece index.
+    ///
+    fn get_piece_length(&self, index: u32) -> Result<u32> {
+        let begin: u32 = index * self.piece_length;
+        let mut end: u32 = begin + self.piece_length;
+
+        // Prevent unbounded values
+        if end > self.length {
+            end = self.length;
+        }
+
+        Ok(end - begin)
     }
 }
