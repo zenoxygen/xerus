@@ -31,16 +31,16 @@ OPTIONS:
 Try to download an official Debian ISO image:
 
 ```
-$> ./xerus -t debian-10.6.0-amd64-netinst.iso.torrent -f debian.iso
-Downloading "debian-10.6.0-amd64-netinst.iso" (1396 pieces)
-Saved in "debian.iso".
+$> ./xerus -f debian-10.7.0-amd64-netinst.iso -t debian-10.7.0-amd64-netinst.iso.torrent
+Downloading "debian-10.7.0-amd64-netinst.iso" (1344 pieces)
+Saved in "debian-10.7.0-amd64-netinst.iso".
 ```
 
 And verify the checksum matches that expected from the checksum file:
 
 ```
-$> sha512sum -c SHA512SUM | grep debian.iso
-debian.iso: OK
+$> sha512sum -c SHA512SUM | grep debian-10.7.0-amd64-netinst.iso
+debian-10.7.0-amd64-netinst.iso: OK
 ```
 
 ## Debug
