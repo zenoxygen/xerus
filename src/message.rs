@@ -35,9 +35,9 @@ pub const MESSAGE_PIECE: MessageId = 7;
 #[derive(Default, Debug)]
 pub struct Message {
     // Message type
-    id: MessageId,
+    pub id: MessageId,
     // Message payload
-    payload: MessagePayload,
+    pub payload: MessagePayload,
 }
 
 impl Message {
@@ -63,16 +63,6 @@ impl Message {
     ///
     pub fn new_with_payload(id: MessageId, payload: MessagePayload) -> Self {
         Message { id, payload }
-    }
-
-    /// Get message id.
-    pub fn get_id(&self) -> MessageId {
-        self.id
-    }
-
-    /// Get message payload.
-    pub fn get_payload(&self) -> MessagePayload {
-        self.payload.to_vec()
     }
 
     /// Serialize message.

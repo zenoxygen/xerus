@@ -214,7 +214,7 @@ impl Worker {
             let message: Message = client.read_message()?;
 
             // Parse message
-            match message.get_id() {
+            match message.id {
                 MESSAGE_CHOKE => client.read_choke(),
                 MESSAGE_UNCHOKE => client.read_unchoke(),
                 MESSAGE_HAVE => client.read_have(message)?,

@@ -311,12 +311,12 @@ impl Client {
         info!("Receive MESSAGE_HAVE from peer {:?}", self.peer.id);
 
         // Check if message id and payload are valid
-        if message.get_id() != MESSAGE_HAVE || message.get_payload().len() != 4 {
+        if message.id != MESSAGE_HAVE || message.payload.to_vec().len() != 4 {
             return Err(anyhow!("received invalid MESSAGE_HAVE from peer"));
         }
 
         // Get piece index
-        let mut payload_cursor = Cursor::new(message.get_payload());
+        let mut payload_cursor = Cursor::new(message.payload.to_vec());
         let index = payload_cursor.read_u32::<BigEndian>()?;
 
         // Update bitfield
@@ -336,12 +336,12 @@ impl Client {
         info!("Receive MESSAGE_BITFIELD from peer {:?}", self.peer.id);
 
         let message: Message = self.read_message()?;
-        if message.get_id() != MESSAGE_BITFIELD {
+        if message.id != MESSAGE_BITFIELD {
             return Err(anyhow!("received invalid MESSAGE_BITFIELD from peer"));
         }
 
         // Update bitfield
-        self.bitfield = message.get_payload();
+        self.bitfield = message.payload.to_vec();
 
         Ok(())
     }
@@ -396,12 +396,12 @@ impl Client {
         info!("Receive MESSAGE_PIECE from peer {:?}", self.peer.id);
 
         // Check if message id and payload are valid
-        if message.get_id() != MESSAGE_PIECE || message.get_payload().len() < 8 {
+        if message.id != MESSAGE_PIECE || message.payload.to_vec().len() < 8 {
             return Err(anyhow!("received invalid MESSAGE_HAVE from peer"));
         }
 
         // Get message payload
-        let payload: Vec<u8> = message.get_payload();
+        let payload: Vec<u8> = message.payload.to_vec();
 
         // Get piece index
         let mut payload_cursor = Cursor::new(&payload[0..4]);
