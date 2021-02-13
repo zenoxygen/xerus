@@ -352,10 +352,12 @@ impl Client {
     /// Send REQUEST message to remote peer.
     ///
     /// The request message is fixed length, and is used to request a block.
-    /// The payload contains the following information:
-    /// - index: integer specifying the zero-based piece index
-    /// - begin: integer specifying the zero-based byte offset within the piece
-    /// - length: integer specifying the requested length.
+    ///
+    /// # Arguments
+    ///
+    /// * `index` - The zero-based piece index.
+    /// * `begin` - The zero-based byte offset within the piece.
+    /// * `length` - The requested length.
     ///
     pub fn send_request(&mut self, index: u32, begin: u32, length: u32) -> Result<()> {
         let mut payload: Vec<u8> = vec![];
