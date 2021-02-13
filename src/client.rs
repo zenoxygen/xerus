@@ -174,7 +174,7 @@ impl Client {
 
         // Check info hash received from remote peer
         let handshake_decoded: Handshake = deserialize_handshake(&handshake_buf, handshake_len)?;
-        if handshake_decoded.get_info_hash() != self.info_hash {
+        if handshake_decoded.info_hash != self.info_hash {
             return Err(anyhow!("invalid handshake received from peer"));
         }
 

@@ -24,15 +24,15 @@ const PROTOCOL_ID: &str = "BitTorrent protocol";
 
 /// Handshake structure.
 pub struct Handshake {
-    pstrlen: usize,
+    pub pstrlen: usize,
     // String identifier of the protocol
-    pstr: Vec<u8>,
+    pub pstr: Vec<u8>,
     // 8 reserved bytes, all set to 0
-    reserved: Vec<u8>,
+    pub reserved: Vec<u8>,
     // 20-byte SHA-1 hash of the info key in the metainfo file
-    info_hash: Vec<u8>,
+    pub info_hash: Vec<u8>,
     // 20-byte string used as a unique ID for the client
-    peer_id: Vec<u8>,
+    pub peer_id: Vec<u8>,
 }
 
 impl Handshake {
@@ -58,11 +58,6 @@ impl Handshake {
             info_hash,
             peer_id,
         }
-    }
-
-    // Get handshake info hash.
-    pub fn get_info_hash(self) -> Vec<u8> {
-        self.info_hash
     }
 
     /// Serialize an handshake message.
