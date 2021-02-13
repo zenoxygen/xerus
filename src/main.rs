@@ -44,7 +44,9 @@ fn run(args: clap::ArgMatches) -> Result<()> {
     let file = args.value_of("file").unwrap();
 
     // Check if torrent file exists
-    if Path::new(&torrent).exists() {
+    if !Path::new(&torrent).exists() {
+        return Err(anyhow!("could not find torrent"));
+    } else {
         let torrent_filepath = PathBuf::from(torrent);
         let output_filepath = PathBuf::from(file);
 
@@ -63,11 +65,9 @@ fn run(args: clap::ArgMatches) -> Result<()> {
         if output_file.write(&data).is_err() {
             return Err(anyhow!("could not write data to file"));
         }
-    } else {
-        return Err(anyhow!("could not find torrent"));
-    }
 
-    println!("Saved in {:?}.", file);
+        println!("Saved in {:?}.", file);
+    }
 
     Ok(())
 }
