@@ -59,13 +59,13 @@ impl Client {
     ///
     pub fn new(peer: Peer, peer_id: Vec<u8>, info_hash: Vec<u8>) -> Result<Client> {
         // Open connection with remote peer
-        let peer_socket = SocketAddr::new(IpAddr::V4(peer.get_ip()), peer.get_port());
+        let peer_socket = SocketAddr::new(IpAddr::V4(peer.ip), peer.port);
         let conn = match TcpStream::connect_timeout(&peer_socket, Duration::from_secs(15)) {
             Ok(conn) => conn,
             Err(_) => return Err(anyhow!("could not connect to peer")),
         };
 
-        info!("Connected to peer {:?}", peer.get_id());
+        info!("Connected to peer {:?}", peer.id);
 
         // Return new client
         let client = Client {
@@ -206,7 +206,7 @@ impl Client {
 
         // If message length is 0, it's a keep-alive
         if message_len == 0 {
-            info!("Receive KEEP_ALIVE from peer {:?}", self.peer.get_id());
+            info!("Receive KEEP_ALIVE from peer {:?}", self.peer.id);
             return Err(anyhow!("keep-alive"));
         }
 
@@ -239,7 +239,7 @@ impl Client {
 
     /// Read CHOKE message from remote peer.
     pub fn read_choke(&mut self) {
-        info!("Receive MESSAGE_CHOKE from peer {:?}", self.peer.get_id());
+        info!("Receive MESSAGE_CHOKE from peer {:?}", self.peer.id);
         self.choked = true
     }
 
@@ -248,7 +248,7 @@ impl Client {
         let message: Message = Message::new(MESSAGE_UNCHOKE);
         let message_encoded = message.serialize()?;
 
-        info!("Send MESSAGE_UNCHOKE to peer {:?}", self.peer.get_id());
+        info!("Send MESSAGE_UNCHOKE to peer {:?}", self.peer.id);
 
         if self.conn.write(&message_encoded).is_err() {
             return Err(anyhow!("could not send MESSAGE_UNCHOKE to peer"));
@@ -259,7 +259,7 @@ impl Client {
 
     /// Read UNCHOKE message from remote peer.
     pub fn read_unchoke(&mut self) {
-        info!("Receive MESSAGE_UNCHOKE from peer {:?}", self.peer.get_id());
+        info!("Receive MESSAGE_UNCHOKE from peer {:?}", self.peer.id);
         self.choked = false
     }
 
@@ -268,7 +268,7 @@ impl Client {
         let message: Message = Message::new(MESSAGE_INTERESTED);
         let message_encoded = message.serialize()?;
 
-        info!("Send MESSAGE_INTERESTED to peer {:?}", self.peer.get_id());
+        info!("Send MESSAGE_INTERESTED to peer {:?}", self.peer.id);
 
         if self.conn.write(&message_encoded).is_err() {
             return Err(anyhow!("could not send MESSAGE_INTERESTED to peer"));
@@ -290,7 +290,7 @@ impl Client {
         let message: Message = Message::new_with_payload(MESSAGE_HAVE, payload);
         let message_encoded = message.serialize()?;
 
-        info!("Send MESSAGE_HAVE to peer {:?}", self.peer.get_id());
+        info!("Send MESSAGE_HAVE to peer {:?}", self.peer.id);
 
         if self.conn.write(&message_encoded).is_err() {
             return Err(anyhow!("could not send MESSAGE_HAVE to peer"));
@@ -308,7 +308,7 @@ impl Client {
     /// * `message` - The message to parse.
     ///
     pub fn read_have(&mut self, message: Message) -> Result<()> {
-        info!("Receive MESSAGE_HAVE from peer {:?}", self.peer.get_id());
+        info!("Receive MESSAGE_HAVE from peer {:?}", self.peer.id);
 
         // Check if message id and payload are valid
         if message.get_id() != MESSAGE_HAVE || message.get_payload().len() != 4 {
@@ -333,10 +333,7 @@ impl Client {
     /// Spare bits at the end are set to zero.
     ///
     pub fn read_bitfield(&mut self) -> Result<()> {
-        info!(
-            "Receive MESSAGE_BITFIELD from peer {:?}",
-            self.peer.get_id()
-        );
+        info!("Receive MESSAGE_BITFIELD from peer {:?}", self.peer.id);
 
         let message: Message = self.read_message()?;
         if message.get_id() != MESSAGE_BITFIELD {
@@ -373,7 +370,7 @@ impl Client {
             index,
             begin,
             begin + length,
-            self.peer.get_id()
+            self.peer.id
         );
 
         if self.conn.write(&message_encoded).is_err() {
@@ -396,7 +393,7 @@ impl Client {
     /// * `piece_work` - A work piece.
     ///
     pub fn read_piece(&mut self, message: Message, piece_work: &mut PieceWork) -> Result<()> {
-        info!("Receive MESSAGE_PIECE from peer {:?}", self.peer.get_id());
+        info!("Receive MESSAGE_PIECE from peer {:?}", self.peer.id);
 
         // Check if message id and payload are valid
         if message.get_id() != MESSAGE_PIECE || message.get_payload().len() < 8 {
@@ -435,7 +432,7 @@ impl Client {
             index,
             begin,
             begin + block_len,
-            self.peer.get_id()
+            self.peer.id
         );
 
         // Add block to piece data

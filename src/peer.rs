@@ -49,21 +49,6 @@ impl Peer {
             port: 0,
         }
     }
-
-    /// Get peer id.
-    pub fn get_id(&self) -> u32 {
-        self.id
-    }
-
-    /// Get peer ip.
-    pub fn get_ip(&self) -> Ipv4Addr {
-        self.ip
-    }
-
-    /// Get peer port.
-    pub fn get_port(&self) -> u16 {
-        self.port
-    }
 }
 
 impl Torrent {
