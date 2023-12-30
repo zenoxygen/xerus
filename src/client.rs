@@ -18,9 +18,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-extern crate anyhow;
-extern crate url;
-
 use crate::handshake::*;
 use crate::message::*;
 use crate::peer::*;

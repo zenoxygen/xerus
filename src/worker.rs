@@ -18,22 +18,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-extern crate anyhow;
-extern crate crypto;
-extern crate hex;
-extern crate serde;
-extern crate serde_bencode;
-extern crate url;
-
 use crate::client::*;
 use crate::message::*;
 use crate::peer::*;
 use crate::piece::*;
 
 use anyhow::{anyhow, Result};
+use boring::sha::Sha1;
 use crossbeam_channel::{Receiver, Sender};
-use crypto::digest::Digest;
-use crypto::sha1::Sha1;
 
 // Maximum number of requests
 const NB_REQUESTS_MAX: u32 = 5;
@@ -237,16 +229,13 @@ impl Worker {
     fn verify_piece_integrity(&self, piece_work: &mut PieceWork) -> Result<()> {
         // Hash piece data
         let mut hasher = Sha1::new();
-        hasher.input(&piece_work.data);
+        hasher.update(&piece_work.data);
 
         // Read hash digest
-        let hex = hasher.result_str();
-
-        // Decoded hex string into bytes
-        let decoded: Vec<u8> = hex::decode(hex)?;
+        let hash = hasher.finish().to_vec();
 
         // Compare hashes
-        if decoded != piece_work.hash {
+        if hash != piece_work.hash {
             return Err(anyhow!(
                 "could not verify integrity of piece downloaded from peer"
             ));

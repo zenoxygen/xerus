@@ -18,21 +18,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-extern crate anyhow;
-extern crate crypto;
-extern crate hex;
-extern crate serde;
-extern crate serde_bencode;
-extern crate url;
-
 use crate::peer::*;
 use crate::piece::*;
 use crate::worker::*;
 
 use anyhow::{anyhow, Result};
+use boring::sha::Sha1;
 use crossbeam_channel::{unbounded, Receiver, Sender};
-use crypto::digest::Digest;
-use crypto::sha1::Sha1;
 use indicatif::{ProgressBar, ProgressStyle};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -116,15 +108,12 @@ impl BencodeInfo {
 
         // Hash bencoded informations
         let mut hasher = Sha1::new();
-        hasher.input(&buf);
+        hasher.update(&buf);
 
         // Read hash digest
-        let hex = hasher.result_str();
+        let hash = hasher.finish().to_vec();
 
-        // Decoded hex string into bytes
-        let decoded: Vec<u8> = hex::decode(hex)?;
-
-        Ok(decoded)
+        Ok(hash)
     }
 
     /// Split bencoded pieces into vectors of SHA-1 hashes.
@@ -355,6 +344,7 @@ impl Torrent {
         pb.set_style(
             ProgressStyle::default_bar()
                 .template("{spinner:.green} {bytes}/{total_bytes} [{bar:40.cyan/blue}] {percent}%")
+                .unwrap()
                 .progress_chars("#>-"),
         );
 
