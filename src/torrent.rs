@@ -211,7 +211,7 @@ impl Torrent {
         };
 
         // Send GET request to the tracker
-        let response = match client.get(&tracker_url).send() {
+        let response = match client.get(tracker_url).send() {
             Ok(response) => match response.bytes() {
                 Ok(bytes) => bytes,
                 Err(_) => return Err(anyhow!("could not read response from tracker")),

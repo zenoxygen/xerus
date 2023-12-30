@@ -94,7 +94,7 @@ impl Message {
 /// * `message_buf` - The message to deserialize.
 /// * `message_len` - The message length.
 ///
-pub fn deserialize_message(message_buf: &Vec<u8>, message_len: usize) -> Result<Message> {
+pub fn deserialize_message(message_buf: &[u8], message_len: usize) -> Result<Message> {
     // Get message id
     let id: MessageId = message_buf[0];
     // Get message payload

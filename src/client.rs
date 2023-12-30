@@ -418,7 +418,7 @@ impl Client {
         let block_len: u32 = block.len() as u32;
 
         // Check if byte offset is valid
-        if begin + block_len > piece_work.length as u32 {
+        if begin + block_len > piece_work.length {
             return Err(anyhow!(
                 "received invalid byte offset within piece from peer"
             ));

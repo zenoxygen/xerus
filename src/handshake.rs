@@ -94,7 +94,7 @@ impl Handshake {
 /// * `buf` - Bytes containing the handshake message.
 /// * `pstrlen` - Length of protocol identifier.
 ///
-pub fn deserialize_handshake(buf: &Vec<u8>, pstrlen: usize) -> Result<Handshake> {
+pub fn deserialize_handshake(buf: &[u8], pstrlen: usize) -> Result<Handshake> {
     // Get pstr
     let pstr = buf[0..pstrlen].to_vec();
     // Get reserved

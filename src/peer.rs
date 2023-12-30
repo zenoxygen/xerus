@@ -69,25 +69,25 @@ impl Torrent {
 
         // Build peers
         let mut peers: Vec<Peer> = vec![Peer::new(); nb_peers];
-        let mut port = vec![];
 
-        for i in 0..nb_peers {
+        for (i, peer) in peers.iter_mut().enumerate().take(nb_peers) {
             // Create peer ID
-            peers[i].id = i as u32;
+            peer.id = i as u32;
+
             let offset = i * PEER_SIZE;
-            // Add peer IP address
-            peers[i].ip = Ipv4Addr::new(
+
+            // Read peer IP address
+            peer.ip = Ipv4Addr::new(
                 tracker_peers[offset],
                 tracker_peers[offset + 1],
                 tracker_peers[offset + 2],
                 tracker_peers[offset + 3],
             );
-            port.push(tracker_peers[offset + 4]);
-            port.push(tracker_peers[offset + 5]);
-            let mut port_cursor = Cursor::new(port);
-            // Add peer port
-            peers[i].port = port_cursor.read_u16::<BigEndian>()?;
-            port = vec![];
+
+            // Read peer port
+            let port_bytes = &tracker_peers[offset + 4..offset + 6];
+            let mut port_cursor = Cursor::new(port_bytes);
+            peer.port = port_cursor.read_u16::<BigEndian>()?;
         }
 
         Ok(peers)
