@@ -18,12 +18,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-use clap::{App, Arg};
+use clap::{crate_name, crate_version, App, Arg};
 
 /// Parse arguments.
 pub fn parse_args<'a>() -> clap::ArgMatches<'a> {
-    App::new("xerus")
-        .version("0.1.0")
+    App::new(crate_name!())
+        .version(crate_version!())
         .about("A command-line BitTorrent client, written in Rust.")
         .author("zenoxygen <zenoxygen@protonmail.com>")
         .arg(
