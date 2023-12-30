@@ -1,6 +1,6 @@
 # xerus
 
-[![Build Status](https://gitlab.com/zenoxygen/xerus/badges/master/pipeline.svg)](https://gitlab.com/zenoxygen/xerus/pipelines)
+[![Build Status](https://github.com/zenoxygen/xerus/actions/workflows/ci.yaml/badge.svg)](https://github.com/zenoxygen/xerus/actions/workflows/ci.yaml)
 [![Crates.io](https://img.shields.io/crates/v/xerus.svg)](https://crates.io/crates/xerus)
 [![Docs](https://docs.rs/xerus/badge.svg)](https://docs.rs/xerus)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
